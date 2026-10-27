@@ -1,0 +1,14 @@
+[project]
+name = "encounter-pipeline"
+version = "0.1.0"
+description = "Synthetic NEMT encounter pipeline: X12 837P out, 999/277CA back, reconcile and measure."
+readme = "README.md"
+authors = [
+    { name = "Gus Rodriguez", email = "26751374+grodriguez1229@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = []
+
+[build-system]
+requires = ["uv_build>=0.12.21,<0.13.0"]
+build-backend = "uv_build"
