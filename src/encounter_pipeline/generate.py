@@ -5,6 +5,7 @@ Everything comes from one seeded random generator, so the same seed gives the sa
 
 import random
 from datetime import date, timedelta
+from decimal import Decimal
 
 import duckdb
 from faker import Faker
@@ -311,6 +312,25 @@ def inject_problems(
     return problems
 
 
+def make_mileage_corrections(config: Config, trips: list[dict], problems: list[dict]) -> list[dict]:
+    """About 1% of clean completed trips get a corrected mileage a few weeks later.
+
+    Uses its own random generator so adding this didn't change any other generated data.
+    """
+    rng = random.Random(f"{config.seed}:mileage")
+    broken = {p["trip_id"] for p in problems}
+    clean = [t for t in trips if t["status"] == "completed" and t["trip_id"] not in broken]
+    corrections = []
+    for t in rng.sample(clean, round(len(clean) * 0.01)):
+        delta = Decimal(rng.choice([-1, 1]) * rng.randint(10, 60)) / 10
+        corrections.append({
+            "trip_id": t["trip_id"],
+            "corrected_miles": max(Decimal("1.0"), Decimal(str(t["loaded_miles"])) + delta),
+            "reported_date": t["trip_date"] + timedelta(days=rng.randint(20, 45)),
+        })
+    return corrections
+
+
 def load(con: duckdb.DuckDBPyConnection, table: str, rows: list[dict]) -> None:
     """Replace a table's contents, so re-running generate is idempotent."""
     con.execute(f"DELETE FROM {table}")
@@ -339,3 +359,4 @@ def run(config: Config, con: duckdb.DuckDBPyConnection) -> None:
     load(con, "vendors", vendors)
     load(con, "trips", trips)
     load(con, "injected_problems", problems)
+    load(con, "mileage_corrections", make_mileage_corrections(config, trips, problems))

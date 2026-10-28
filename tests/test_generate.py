@@ -5,7 +5,7 @@ from encounter_pipeline.config import Config
 from encounter_pipeline.db import connect
 from encounter_pipeline.npi import is_valid_npi
 
-TABLES = ["plans", "members", "vendors", "trips", "injected_problems"]
+TABLES = ["plans", "members", "vendors", "trips", "injected_problems", "mileage_corrections"]
 
 
 def snapshot(con):

@@ -137,3 +137,11 @@ CREATE TABLE IF NOT EXISTS quarantine (
     detail VARCHAR,
     received_at TIMESTAMP NOT NULL
 );
+
+-- Vendors sometimes send a corrected mileage after the ride was already submitted.
+-- An accepted encounter with a correction gets resent as a replacement (CLM05-3 = 7).
+CREATE TABLE IF NOT EXISTS mileage_corrections (
+    trip_id VARCHAR PRIMARY KEY,
+    corrected_miles DECIMAL(6, 1) NOT NULL,
+    reported_date DATE NOT NULL
+);
