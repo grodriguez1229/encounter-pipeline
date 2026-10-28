@@ -50,6 +50,13 @@ def fake_address(fake: Faker) -> dict:
     }
 
 
+def vendor_address(fake: Faker) -> dict:
+    """The 837 requires ZIP+4 for the billing provider (2010AA N403), so vendors get 9 digits."""
+    address = fake_address(fake)
+    address["zip"] += fake.numerify("####")
+    return address
+
+
 def make_members(config: Config, rng: random.Random, fake: Faker) -> list[dict]:
     window_start = config.trips_start_date
     window_end = config.run_date
@@ -96,7 +103,7 @@ def make_vendors(config: Config, rng: random.Random, fake: Faker) -> list[dict]:
             "vendor_name": f"{fake.last_name()} Transport LLC",
             "npi": fake_npi(rng),
             "tax_id": fake_tax_id(rng),
-            **fake_address(fake),
+            **vendor_address(fake),
         })
     return vendors
 
@@ -207,7 +214,7 @@ def make_problem_vendors(rng: random.Random, fake: Faker) -> list[dict]:
     bad_check_digit = str((int(good_npi[9]) + 1) % 10)
     return [
         {"vendor_id": vendor_id, "vendor_name": f"{fake.last_name()} Transport LLC",
-         "npi": npi, "tax_id": fake_tax_id(rng), **fake_address(fake)}
+         "npi": npi, "tax_id": fake_tax_id(rng), **vendor_address(fake)}
         for vendor_id, npi in [
             (MISSING_NPI_VENDOR, None),
             (INVALID_NPI_VENDOR, good_npi[:9] + bad_check_digit),
