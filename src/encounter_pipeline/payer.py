@@ -11,7 +11,7 @@ run_date; later ones haven't "arrived" yet.
 """
 
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
@@ -49,13 +49,20 @@ def claim_key(c: Claim837) -> tuple:
             tuple((line.code, line.modifier) for line in c.lines))
 
 
-def adjudicate(file: File837, roster: Roster, accepted_keys: set,
+@dataclass
+class PayerState:
+    """What the payer remembers between files: accepted rides (to catch duplicates)
+    and the claim numbers it handed out (so a replacement must point at a real one)."""
+    accepted_keys: set = field(default_factory=set)
+    claim_numbers: set = field(default_factory=set)
+
+
+def adjudicate(file: File837, roster: Roster, state: PayerState,
                received: date) -> list[ClaimStatus]:
     """Front-end edits, one verdict per claim. The first failing check wins.
 
-    accepted_keys holds every claim this payer has accepted so far and is updated
-    as claims are accepted, so a duplicate is caught whether it came in an earlier
-    file or earlier in this one.
+    state is updated as claims are accepted, so a duplicate is caught whether it came
+    in an earlier file or earlier in this one.
     """
     statuses = []
     for n, c in enumerate(file.claims, start=1):
@@ -72,12 +79,15 @@ def adjudicate(file: File837, roster: Roster, accepted_keys: set,
             status = ClaimStatus(c, "A3", "33")                   # subscriber not found
         elif not eligible(roster, c.member_id, service_date):
             status = ClaimStatus(c, "A3", "109", "IL")            # subscriber not eligible
-        elif c.frequency_code == "1" and claim_key(c) in accepted_keys:
+        elif c.frequency_code == "7" and c.payer_claim_number not in state.claim_numbers:
+            status = ClaimStatus(c, "A7", "464")                  # unknown claim to replace
+        elif c.frequency_code == "1" and claim_key(c) in state.accepted_keys:
             status = ClaimStatus(c, "A3", "54")                   # duplicate
         else:
             # Payer claim number: made from the interchange and position, so it's stable.
             status = ClaimStatus(c, "A2", "20", payer_claim_number=f"26{file.isa13:07d}{n:04d}")
-            accepted_keys.add(claim_key(c))
+            state.accepted_keys.add(claim_key(c))
+            state.claim_numbers.add(status.payer_claim_number)
         statuses.append(status)
     return statuses
 
@@ -90,7 +100,7 @@ class Response:
     text: str
 
 
-def respond(config: Config, text: str, roster: Roster, accepted_keys: set) -> list[Response]:
+def respond(config: Config, text: str, roster: Roster, state: PayerState) -> list[Response]:
     """The 999, and the 277CA if the 999 accepted the file, for one outbound 837."""
     segments = parse(text)
     file = claims_from_segments(segments)
@@ -132,7 +142,7 @@ def respond(config: Config, text: str, roster: Roster, accepted_keys: set) -> li
     else:
         lag_days = rng.randint(7, 14)
     claim_ack_time = ack_time + timedelta(days=lag_days, hours=rng.randint(1, 8))
-    statuses = adjudicate(file, roster, accepted_keys, file.created.date())
+    statuses = adjudicate(file, roster, state, file.created.date())
     body = writer_277ca.transaction_body(file, payer_id, statuses, file.created, claim_ack_time)
     responses.append(Response(
         "277CA", claim_ack_time,
@@ -162,10 +172,10 @@ def run(config: Config, con: duckdb.DuckDBPyConnection) -> None:
         ).fetchall()
     }
     cutoff = datetime.combine(config.run_date + timedelta(days=1), time())
-    accepted_keys: set = set()
+    state = PayerState()
     written = 0
     for text in outbound_in_send_order(config.outbound_dir):
-        for r in respond(config, text, roster, accepted_keys):
+        for r in respond(config, text, roster, state):
             path = config.inbound_dir / r.file_name
             if r.arrives < cutoff and not path.exists():
                 path.write_text(r.text)
