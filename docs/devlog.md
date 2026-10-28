@@ -35,3 +35,5 @@ How this got built, in order. I used Claude Code as the main coder and reviewed 
 - Future-dated trips that are still waiting on a fix showed up as one row per 2027 month in the report. They're folded into one "future date (bad data)" row now.
 
 **run-all (step 10).** Wipes `data/`, runs generate, build, simulate and ingest, then loops resubmit, simulate, ingest until a round sends nothing (two rounds with the default seed), then the report. About 40 seconds. Tests check that two runs with the same seed produce byte-identical X12 files and report, and that a different seed doesn't.
+
+**README (step 11).** Short version of all of the above, how to run it, and trimmed samples of each file type from a real run with notes on what the important elements mean.
