@@ -55,12 +55,13 @@ Hand-written X12 parser: split on the delimiters from the ISA segment, never har
 
 ### 5. resubmit
 
-- Fix the correctable rejections in the source data (simulate an ops fix) and rebuild them as CLM05-3 = 7 (replacement) with the original payer claim number when one exists.
+- Fix the correctable rejections in the source data (simulate an ops fix) and resubmit them as new originals (CLM05-3 = 1). A claim rejected on the 277CA never made it into the payer's system, so there's no payer claim number to replace.
+- Also correct a few already-accepted encounters (e.g. wrong mileage) and send those as replacements (CLM05-3 = 7) with REF*F8 = the payer claim number from the 277CA.
 - Leave the uncorrectable ones (e.g. member not eligible) as final rejections with a reason.
 
 ### 6. report (measurement)
 
-SQL views in DuckDB plus a CLI that prints a short summary (or writes a Markdown report):
+dbt-style SQL models in DuckDB (staging, intermediate, marts; `ref()`/`source()` resolved by a small Python runner) plus a CLI that prints a short summary (or writes a Markdown report):
 
 - Completeness: completed trips with an accepted encounter / all completed trips, by plan and month.
 - Accuracy: first-pass acceptance rate, rejections by reason, resubmission success rate.
@@ -78,7 +79,7 @@ Star-ish, kept small:
 
 - Python 3.12, uv, DuckDB, Faker, pytest, ruff.
 - CLI with plain `argparse` or `typer`: `encounters generate | build | simulate | ingest | resubmit | report | run-all`.
-- Orchestration: `run-all` runs the steps in order. Stretch: a small Airflow DAG file that calls the same functions, to show the steps map onto Airflow tasks (no need to run a real Airflow cluster).
+- Orchestration: `run-all` runs the steps in order. Stretch: a small Airflow DAG file that calls the same functions, to show the steps map onto Airflow tasks (no need to run a real Airflow cluster). Stretch: a local dbt-duckdb project over the same model files.
 
 ## Tests
 
