@@ -3,13 +3,23 @@
 import argparse
 import shutil
 
+from encounter_pipeline import generate
 from encounter_pipeline.config import Config
+from encounter_pipeline.db import connect
 
 STEPS = ["generate", "build", "simulate", "ingest", "resubmit", "report"]
 
 
+STEP_FUNCTIONS = {
+    "generate": generate.run,
+}
+
+
 def run_step(step: str, config: Config) -> None:
-    raise NotImplementedError(f"'{step}' isn't built yet")
+    if step not in STEP_FUNCTIONS:
+        raise NotImplementedError(f"'{step}' isn't built yet")
+    with connect(config) as con:
+        STEP_FUNCTIONS[step](config, con)
 
 
 def run_all(config: Config) -> None:

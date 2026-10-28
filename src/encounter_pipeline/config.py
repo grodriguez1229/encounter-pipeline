@@ -8,6 +8,11 @@ from pathlib import Path
 @dataclass(frozen=True)
 class Config:
     seed: int = 42
+    n_members: int = 1000
+    n_vendors: int = 15
+    n_trips: int = 6000
+    # Trips are spread from this date up to the day before run_date.
+    trips_start_date: date = date(2026, 1, 1)
     # Share of completed trips that get a deliberate data problem.
     error_rate: float = 0.05
     # Stands in for "today" everywhere (timestamps, response arrival, deadlines),
