@@ -96,6 +96,87 @@ def make_vendors(config: Config, rng: random.Random, fake: Faker) -> list[tuple]
     return vendors
 
 
+# Origin/destination codes used in transport modifiers (origin letter + destination
+# letter, so R then P gives modifier RP). Only the ones this project uses:
+# R residence, P physician's office, H hospital, D diagnostic or therapeutic site,
+# J free-standing dialysis facility.
+FACILITY_TYPES = {"P": 20, "H": 5, "D": 6, "J": 4}  # how many fake facilities of each type
+
+
+def make_facilities(rng: random.Random, fake: Faker) -> dict[str, list[tuple]]:
+    """Fake destinations by type, as (address1, city, state, zip)."""
+    return {
+        code: [
+            (fake.street_address(), fake.city(), SERVICE_STATE,
+             fake.zipcode_in_state(SERVICE_STATE))
+            for _ in range(count)
+        ]
+        for code, count in FACILITY_TYPES.items()
+    }
+
+
+def make_trips(
+    config: Config,
+    rng: random.Random,
+    fake: Faker,
+    members: list[tuple],
+    vendors: list[tuple],
+) -> list[tuple]:
+    """Round trips: an outbound leg from home and a return leg the same day.
+
+    Each leg is its own trip (and later its own encounter), which is how NEMT
+    brokers usually count them.
+    """
+    facilities = make_facilities(rng, fake)
+    vendor_ids = [v[0] for v in vendors]
+    last_trip_day = config.run_date - timedelta(days=1)
+
+    # Per-member traits: how they ride and where they usually go.
+    level_of_service = {}
+    usual_destination = {}
+    for m in members:
+        level_of_service[m[0]] = rng.choices(
+            ["ambulatory", "wheelchair", "stretcher"], weights=[70, 22, 8]
+        )[0]
+        # Dialysis patients ride the most, always to the same clinic.
+        usual_destination[m[0]] = "J" if rng.random() < 0.08 else None
+    ride_weights = [6 if usual_destination[m[0]] == "J" else 1 for m in members]
+
+    legs = []
+    while len(legs) < config.n_trips:
+        m = rng.choices(members, weights=ride_weights)[0]
+        member_id, home = m[0], (m[6], m[7], m[8], m[9])
+        # Only schedule rides while the member is eligible; injected problems break this later.
+        start = max(m[10], config.trips_start_date)
+        end = min(m[11] or last_trip_day, last_trip_day)
+        if start > end:
+            continue
+        trip_date = start + timedelta(days=rng.randint(0, (end - start).days))
+
+        dest_type = usual_destination[member_id] or rng.choices(
+            ["P", "H", "D"], weights=[70, 15, 15]
+        )[0]
+        dest = rng.choice(facilities[dest_type])
+        miles = round(rng.uniform(2, 40), 1)
+        vendor_id = rng.choice(vendor_ids)
+        los = level_of_service[member_id]
+
+        # Both legs share a status: if the outbound ride didn't happen, the return didn't either.
+        status = rng.choices(["completed", "cancelled", "no_show"], weights=[86, 9, 5])[0]
+        legs.append((member_id, vendor_id, trip_date, "R", home, dest_type, dest, los, miles,
+                     status))
+        legs.append((member_id, vendor_id, trip_date, dest_type, dest, "R", home, los, miles,
+                     status))
+
+    legs.sort(key=lambda leg: (leg[2], leg[0]))  # stable, so the return leg stays second
+    trips = []
+    for i, (member_id, vendor_id, trip_date, o_type, o_addr, d_type, d_addr, los, miles,
+            status) in enumerate(legs[: config.n_trips], start=1):
+        trips.append((f"T{i:08d}", member_id, vendor_id, trip_date, o_type, *o_addr,
+                      d_type, *d_addr, los, miles, status))
+    return trips
+
+
 def load(con: duckdb.DuckDBPyConnection, table: str, rows: list[tuple]) -> None:
     """Replace a table's contents, so re-running generate is idempotent."""
     con.execute(f"DELETE FROM {table}")
@@ -110,5 +191,8 @@ def run(config: Config, con: duckdb.DuckDBPyConnection) -> None:
     fake.seed_instance(config.seed)
 
     load(con, "plans", PLANS)
-    load(con, "members", make_members(config, rng, fake))
-    load(con, "vendors", make_vendors(config, rng, fake))
+    members = make_members(config, rng, fake)
+    vendors = make_vendors(config, rng, fake)
+    load(con, "members", members)
+    load(con, "vendors", vendors)
+    load(con, "trips", make_trips(config, rng, fake, members, vendors))

@@ -42,3 +42,24 @@ CREATE TABLE IF NOT EXISTS vendors (
     state VARCHAR NOT NULL,
     zip VARCHAR NOT NULL
 );
+
+-- One row per ride leg. Only completed trips become encounters.
+CREATE TABLE IF NOT EXISTS trips (
+    trip_id VARCHAR PRIMARY KEY,
+    member_id VARCHAR NOT NULL,
+    vendor_id VARCHAR NOT NULL,
+    trip_date DATE NOT NULL,
+    origin_type VARCHAR NOT NULL,       -- one-letter origin code, first half of the HCPCS modifier
+    pickup_address1 VARCHAR NOT NULL,
+    pickup_city VARCHAR NOT NULL,
+    pickup_state VARCHAR NOT NULL,
+    pickup_zip VARCHAR NOT NULL,
+    destination_type VARCHAR NOT NULL,  -- one-letter destination code, second half of the modifier
+    dropoff_address1 VARCHAR NOT NULL,
+    dropoff_city VARCHAR NOT NULL,
+    dropoff_state VARCHAR NOT NULL,
+    dropoff_zip VARCHAR NOT NULL,
+    level_of_service VARCHAR NOT NULL,  -- ambulatory, wheelchair, stretcher
+    loaded_miles DECIMAL(6, 1) NOT NULL,
+    status VARCHAR NOT NULL             -- completed, cancelled, no_show
+);
