@@ -24,3 +24,7 @@ How this got built, in order. I used Claude Code as the main coder and reviewed 
 - Control numbers were assigned plan by plan instead of night by night.
 - Moving a trip outside eligibility didn't move its reported date, so the ride was "reported" before it happened and got rejected for the wrong reason. Same answer-key test caught it.
 - The billing provider ZIP needs ZIP+4 in 5010. The vendors only had 5 digits.
+
+**Resubmit (step 8).** Ops decisions come from the rejection codes only. Fixable problems (NPI, ZIP, date) get corrected in the source data, logged in `source_adjustments`, and go back as new originals. Not-eligible and duplicates become final rejections. Vendors' late mileage corrections on accepted encounters go out as replacements (CLM05-3 = 7, REF*F8 = payer claim number), and the fake payer now rejects a replacement that points at a claim number it never issued (A7:464). After three rounds everything is either accepted, final, or still waiting near the end of the data.
+
+- First version gave each claim from a 999-rejected file its own fix delay. A duplicate copy could go back before its original, get accepted, and the real trip got rejected as the duplicate. Ops resends a bounced file together, so the delay is now per file for 999s. The test for this fails if the old behavior comes back; I checked.

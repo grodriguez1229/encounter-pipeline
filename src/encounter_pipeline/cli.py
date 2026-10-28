@@ -3,7 +3,7 @@
 import argparse
 import shutil
 
-from encounter_pipeline import build, generate, ingest, payer
+from encounter_pipeline import build, generate, ingest, payer, resubmit
 from encounter_pipeline.config import Config
 from encounter_pipeline.db import connect
 
@@ -15,6 +15,7 @@ STEP_FUNCTIONS = {
     "build": build.run,
     "simulate": payer.run,
     "ingest": ingest.run,
+    "resubmit": resubmit.run,
 }
 
 

@@ -145,3 +145,23 @@ CREATE TABLE IF NOT EXISTS mileage_corrections (
     corrected_miles DECIMAL(6, 1) NOT NULL,
     reported_date DATE NOT NULL
 );
+
+-- Every change resubmit makes to source data, standing in for an ops team's fixes.
+CREATE TABLE IF NOT EXISTS source_adjustments (
+    table_name VARCHAR NOT NULL,        -- trips or vendors
+    row_id VARCHAR NOT NULL,            -- trip_id or vendor_id
+    field VARCHAR NOT NULL,
+    old_value VARCHAR,
+    new_value VARCHAR,
+    adjusted_on DATE NOT NULL,
+    reason VARCHAR NOT NULL
+);
+
+-- Rejections we won't resubmit, with why.
+CREATE TABLE IF NOT EXISTS final_rejections (
+    trip_id VARCHAR PRIMARY KEY,
+    submission_id BIGINT NOT NULL,
+    status_codes VARCHAR,
+    reason VARCHAR NOT NULL,
+    decided_at TIMESTAMP NOT NULL
+);
