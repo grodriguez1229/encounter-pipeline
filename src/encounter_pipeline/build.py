@@ -13,7 +13,7 @@ import duckdb
 
 from encounter_pipeline.config import Config
 from encounter_pipeline.x12 import writer_837
-from encounter_pipeline.x12.envelope import build_interchange
+from encounter_pipeline.x12.envelope import build_interchange, next_control_number
 from encounter_pipeline.x12.writer_837 import ClaimInput
 
 NIGHTLY_RUN_TIME = time(2, 0)
@@ -49,9 +49,13 @@ def write_submission(
     con.begin()
     batch_id = f"{plan['plan_id']}{created:%Y%m%d}"
     body = writer_837.transaction_body(claims, plan, batch_id, created)
-    ic = build_interchange(
-        con,
-        transactions=[body],
+    isa13 = next_control_number(con, "ISA")
+    gs06 = next_control_number(con, "GS")
+    st02 = f"{next_control_number(con, 'ST'):04d}"  # ST02 is 4-9 characters; 4 is typical
+    text = build_interchange(
+        isa13=isa13,
+        gs06=gs06,
+        transactions=[(st02, body)],
         transaction_set_id="837",
         functional_id="HC",                  # GS01 HC = health care claim
         implementation=writer_837.IMPLEMENTATION,
@@ -59,18 +63,17 @@ def write_submission(
         receiver_id=plan["payer_id"],
         created=created,
     )
-    file_name = f"837P_{plan['plan_id']}_{created:%Y%m%d}_{ic.isa13:09d}.x12"
-    (config.outbound_dir / file_name).write_text(ic.text)
+    file_name = f"837P_{plan['plan_id']}_{created:%Y%m%d}_{isa13:09d}.x12"
+    (config.outbound_dir / file_name).write_text(text)
 
     con.execute(
         "INSERT INTO submissions VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        [ic.isa13, file_name, plan["plan_id"], ic.isa13, ic.gs06, ic.st02s[0], len(claims),
-         created],
+        [isa13, file_name, plan["plan_id"], isa13, gs06, st02, len(claims), created],
     )
     con.executemany(
         "INSERT INTO submission_claims VALUES (?, ?, ?, ?, ?, ?)",
         [
-            [ic.isa13, c.trip["trip_id"], c.frequency_code, c.payer_claim_number,
+            [isa13, c.trip["trip_id"], c.frequency_code, c.payer_claim_number,
              len(lines := writer_837.service_lines(c.trip)),
              sum(charge for _, charge, _ in lines)]
             for c in claims

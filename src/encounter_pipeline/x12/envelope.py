@@ -9,7 +9,6 @@ count of what's inside. The control numbers are what responses point back to:
 a 999 names the GS06 and ST02 it's acknowledging.
 """
 
-from dataclasses import dataclass, field
 from datetime import datetime
 
 import duckdb
@@ -31,18 +30,11 @@ def next_control_number(con: duckdb.DuckDBPyConnection, kind: str) -> int:
     return row[0]
 
 
-@dataclass
-class Interchange:
-    text: str
-    isa13: int
-    gs06: int
-    st02s: list[str] = field(default_factory=list)
-
-
 def build_interchange(
-    con: duckdb.DuckDBPyConnection,
     *,
-    transactions: list[list[str]],
+    isa13: int,
+    gs06: int,
+    transactions: list[tuple[str, list[str]]],
     transaction_set_id: str,     # ST01, e.g. 837
     functional_id: str,          # GS01, e.g. HC
     implementation: str,         # GS08 / ST03, e.g. 005010X222A1
@@ -52,15 +44,15 @@ def build_interchange(
     usage: str = "T",
     delims: Delimiters = DEFAULT,
     newlines: bool = True,
-) -> Interchange:
+) -> str:
     """Wrap transaction bodies in ST/SE, one GS/GE and one ISA/IEA.
 
-    Each item in `transactions` is the list of segments between ST and SE.
+    Each item in `transactions` is (ST02, segments between ST and SE). Control numbers
+    are passed in because the sender owns them: ours come from next_control_number,
+    the simulated payer has its own.
     `newlines` puts a line break after each terminator. It's only for readability;
     the parser ignores it.
     """
-    isa13 = next_control_number(con, "ISA")
-    gs06 = next_control_number(con, "GS")
 
     segments = [
         isa_segment(sender_id, receiver_id, isa13, created, usage, delims),
@@ -77,10 +69,7 @@ def build_interchange(
             delims=delims,
         ),
     ]
-    st02s = []
-    for body in transactions:
-        st02 = f"{next_control_number(con, 'ST'):04d}"
-        st02s.append(st02)
+    for st02, body in transactions:
         st = segment("ST", transaction_set_id, st02, implementation, delims=delims)
         # SE01 counts every segment in the transaction, including ST and SE themselves.
         se = segment("SE", str(len(body) + 2), st02, delims=delims)
@@ -91,4 +80,4 @@ def build_interchange(
     ]
 
     terminator = delims.segment + ("\n" if newlines else "")
-    return Interchange("".join(s + terminator for s in segments), isa13, gs06, st02s)
+    return "".join(s + terminator for s in segments)

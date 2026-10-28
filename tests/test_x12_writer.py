@@ -49,31 +49,29 @@ def split(text: str) -> list[list[str]]:
     return [s.split("*") for s in text.replace("\n", "").split("~") if s]
 
 
-def test_envelope_counts_and_control_numbers_match(tmp_path):
-    config = Config(data_dir=tmp_path / "data")
-    with connect(config) as con:
-        bodies = [["BHT*0019*00*X"], ["BHT*0019*00*Y", "REF*X*1"]]
-        ic = build_interchange(
-            con, transactions=bodies, transaction_set_id="837", functional_id="HC",
-            implementation="005010X222A1", sender_id="SENDER", receiver_id="RECEIVER",
-            created=CREATED,
-        )
-    segs = split(ic.text)
+def test_envelope_counts_and_control_numbers_match():
+    transactions = [("0001", ["BHT*0019*00*X"]), ("0002", ["BHT*0019*00*Y", "REF*X*1"])]
+    text = build_interchange(
+        isa13=12, gs06=34, transactions=transactions, transaction_set_id="837",
+        functional_id="HC", implementation="005010X222A1", sender_id="SENDER",
+        receiver_id="RECEIVER", created=CREATED,
+    )
+    segs = split(text)
     by_id = {}
     for s in segs:
         by_id.setdefault(s[0], []).append(s)
 
     isa, iea = by_id["ISA"][0], by_id["IEA"][0]
     gs, ge = by_id["GS"][0], by_id["GE"][0]
-    assert isa[13] == iea[2] == f"{ic.isa13:09d}"
+    assert isa[13] == iea[2] == "000000012"
     assert iea[1] == "1"
-    assert gs[6] == ge[2] == str(ic.gs06)
+    assert gs[6] == ge[2] == "34"
     assert ge[1] == "2"
     assert gs[4] == "20260630" and isa[9] == "260630"
 
     # SE01 = segments from ST through SE inclusive; SE02 = ST02.
     st_positions = [i for i, s in enumerate(segs) if s[0] == "ST"]
     se_positions = [i for i, s in enumerate(segs) if s[0] == "SE"]
-    for st_i, se_i, st02 in zip(st_positions, se_positions, ic.st02s, strict=True):
+    for st_i, se_i, st02 in zip(st_positions, se_positions, ["0001", "0002"], strict=True):
         assert segs[st_i][2] == segs[se_i][2] == st02
         assert int(segs[se_i][1]) == se_i - st_i + 1
