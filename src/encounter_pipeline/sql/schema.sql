@@ -61,7 +61,8 @@ CREATE TABLE IF NOT EXISTS trips (
     dropoff_zip VARCHAR NOT NULL,
     level_of_service VARCHAR NOT NULL,  -- ambulatory, wheelchair, stretcher
     loaded_miles DECIMAL(6, 1) NOT NULL,
-    status VARCHAR NOT NULL             -- completed, cancelled, no_show
+    status VARCHAR NOT NULL,            -- completed, cancelled, no_show
+    reported_date DATE NOT NULL         -- when the vendor confirmed the ride; it's submitted the night after
 );
 
 -- Answer key for the problems `generate` broke on purpose. The pipeline never reads

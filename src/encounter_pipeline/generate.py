@@ -174,6 +174,7 @@ def make_trips(
             # Both legs share a status: if the outbound ride didn't happen, the return
             # didn't either.
             "status": rng.choices(["completed", "cancelled", "no_show"], weights=[86, 9, 5])[0],
+            "reported_date": trip_date + timedelta(days=report_lag(rng)),
         }
         legs.append(trip_leg(shared, "R", home, dest_type, shared["dest"]))
         legs.append(trip_leg(shared, dest_type, shared["dest"], "R", home))
@@ -183,6 +184,17 @@ def make_trips(
     for i, leg in enumerate(legs, start=1):
         leg["trip_id"] = f"T{i:08d}"
     return legs
+
+
+def report_lag(rng: random.Random) -> int:
+    """Days between the ride and the vendor confirming it. Most are quick; a few vendors
+    batch their paperwork and report weeks late, which pushes those past the deadline."""
+    bucket = rng.choices(["fast", "slow", "late"], weights=[85, 10, 5])[0]
+    if bucket == "fast":
+        return rng.randint(1, 5)
+    if bucket == "slow":
+        return rng.randint(6, 20)
+    return rng.randint(21, 60)
 
 
 def trip_leg(shared: dict, origin_type: str, origin: dict, dest_type: str, dest: dict) -> dict:
@@ -197,6 +209,7 @@ def trip_leg(shared: dict, origin_type: str, origin: dict, dest_type: str, dest:
         "level_of_service": shared["level_of_service"],
         "loaded_miles": shared["loaded_miles"],
         "status": shared["status"],
+        "reported_date": shared["reported_date"],
     }
 
 
