@@ -13,7 +13,7 @@ Synthetic NEMT encounter pipeline: 837P out, 999/277CA back, reconcile, resubmit
 ## Commands
 
 - `uv sync` to install, `uv run pytest` to test, `uv run ruff check .` to lint.
-- `uv run encounters run-all` runs the whole pipeline (once it exists).
+- `uv run encounters run-all` runs the whole pipeline: wipes `data/`, generates, submits, loops resubmissions until nothing new goes out, writes `data/report.md`.
 
 ## Git
 

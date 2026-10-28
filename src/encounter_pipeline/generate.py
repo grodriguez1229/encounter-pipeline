@@ -360,3 +360,5 @@ def run(config: Config, con: duckdb.DuckDBPyConnection) -> None:
     load(con, "trips", trips)
     load(con, "injected_problems", problems)
     load(con, "mileage_corrections", make_mileage_corrections(config, trips, problems))
+    print(f"generate: {len(members)} members, {len(vendors)} vendors, {len(trips)} trips, "
+          f"{len(problems)} with injected problems")

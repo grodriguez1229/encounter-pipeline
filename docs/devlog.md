@@ -33,3 +33,5 @@ How this got built, in order. I used Claude Code as the main coder and reviewed 
 
 - Duplicates: left out of completeness and timeliness (same ride, not another one owed), but counted against first-pass accuracy (we sent them, and they were wrong).
 - Future-dated trips that are still waiting on a fix showed up as one row per 2027 month in the report. They're folded into one "future date (bad data)" row now.
+
+**run-all (step 10).** Wipes `data/`, runs generate, build, simulate and ingest, then loops resubmit, simulate, ingest until a round sends nothing (two rounds with the default seed), then the report. About 40 seconds. Tests check that two runs with the same seed produce byte-identical X12 files and report, and that a different seed doesn't.

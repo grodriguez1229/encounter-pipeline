@@ -174,7 +174,8 @@ def queue_replacements(config: Config, con: duckdb.DuckDBPyConnection, batches: 
             (r["trip_id"], "7", r["payer_claim_number"]))
 
 
-def run(config: Config, con: duckdb.DuckDBPyConnection) -> None:
+def run(config: Config, con: duckdb.DuckDBPyConnection) -> int:
+    """Returns how many files were written, so run-all knows when to stop."""
     con.begin()
     batches: dict = defaultdict(list)   # (night, plan_id) -> [(trip_id, frequency, pcn)]
     work_rejections(config, con, batches)
@@ -199,3 +200,4 @@ def run(config: Config, con: duckdb.DuckDBPyConnection) -> None:
             files += 1
     finals = con.execute("SELECT count(*) FROM final_rejections").fetchone()[0]
     print(f"resubmit: wrote {files} files, {finals} final rejections so far")
+    return files
