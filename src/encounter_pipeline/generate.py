@@ -139,6 +139,9 @@ def make_trips(
     ride_weights = [6 if usual_destination[m["member_id"]] == "J" else 1 for m in members]
 
     legs = []
+    # At most one round trip per member per day. Two would look like duplicates to the
+    # payer, and duplicates should only come from inject_problems.
+    booked: set[tuple] = set()
     while len(legs) < config.n_trips:
         m = rng.choices(members, weights=ride_weights)[0]
         # Only schedule rides while the member is eligible; injected problems break this later.
@@ -148,6 +151,9 @@ def make_trips(
             continue
         home = {k: m[k] for k in ("address1", "city", "state", "zip")}
         trip_date = start + timedelta(days=rng.randint(0, (end - start).days))
+        if (m["member_id"], trip_date) in booked:
+            continue
+        booked.add((m["member_id"], trip_date))
         dest_type = usual_destination[m["member_id"]] or rng.choices(
             ["P", "H", "D"], weights=[70, 15, 15]
         )[0]
@@ -187,6 +193,101 @@ def trip_leg(shared: dict, origin_type: str, origin: dict, dest_type: str, dest:
     }
 
 
+# Deliberate data problems, each one tied to a rejection the payer will send back.
+PROBLEMS = ["not_eligible", "missing_npi", "invalid_npi", "future_date", "duplicate", "bad_zip"]
+
+# Two extra vendors exist only to carry the NPI problems. Moving a trip to one of them
+# is how a trip ends up with a missing or bad NPI, while the real vendors stay clean.
+MISSING_NPI_VENDOR = "V9001"
+INVALID_NPI_VENDOR = "V9002"
+
+
+def make_problem_vendors(rng: random.Random, fake: Faker) -> list[dict]:
+    good_npi = fake_npi(rng)
+    bad_check_digit = str((int(good_npi[9]) + 1) % 10)
+    return [
+        {"vendor_id": vendor_id, "vendor_name": f"{fake.last_name()} Transport LLC",
+         "npi": npi, "tax_id": fake_tax_id(rng), **fake_address(fake)}
+        for vendor_id, npi in [
+            (MISSING_NPI_VENDOR, None),
+            (INVALID_NPI_VENDOR, good_npi[:9] + bad_check_digit),
+        ]
+    ]
+
+
+def inject_problems(
+    config: Config,
+    rng: random.Random,
+    members: list[dict],
+    trips: list[dict],
+) -> list[dict]:
+    """Break about error_rate of the completed trips, spread evenly over PROBLEMS.
+
+    Edits trips in place (and appends duplicates). Returns the answer key rows.
+    """
+    completed = [t for t in trips if t["status"] == "completed"]
+    total = round(len(completed) * config.error_rate)
+    counts = {p: total // len(PROBLEMS) for p in PROBLEMS}
+    for p in PROBLEMS[: total % len(PROBLEMS)]:
+        counts[p] += 1
+
+    members_by_id = {m["member_id"]: m for m in members}
+    last_trip_day = config.run_date - timedelta(days=1)
+    used: set[str] = set()
+    problems = []
+
+    def pick(n: int, pool: list[dict]) -> list[dict]:
+        chosen = rng.sample([t for t in pool if t["trip_id"] not in used], n)
+        used.update(t["trip_id"] for t in chosen)
+        return chosen
+
+    # Ride happened outside the member's eligibility span (e.g. after they termed).
+    # Only possible for members whose span starts or ends inside the trip window.
+    def has_gap(t: dict) -> bool:
+        m = members_by_id[t["member_id"]]
+        return m["eligibility_end"] is not None or m["eligibility_start"] > config.trips_start_date
+
+    for t in pick(counts["not_eligible"], [t for t in completed if has_gap(t)]):
+        m = members_by_id[t["member_id"]]
+        problems.append({"trip_id": t["trip_id"], "problem": "not_eligible",
+                         "original_value": t["trip_date"].isoformat()})
+        if m["eligibility_end"] is not None:
+            first, last = m["eligibility_end"] + timedelta(days=1), last_trip_day
+        else:
+            first, last = config.trips_start_date, m["eligibility_start"] - timedelta(days=1)
+        t["trip_date"] = first + timedelta(days=rng.randint(0, (last - first).days))
+
+    for problem, vendor_id in [("missing_npi", MISSING_NPI_VENDOR),
+                               ("invalid_npi", INVALID_NPI_VENDOR)]:
+        for t in pick(counts[problem], completed):
+            problems.append({"trip_id": t["trip_id"], "problem": problem,
+                             "original_value": t["vendor_id"]})
+            t["vendor_id"] = vendor_id
+
+    # Keyed with next year's date. Always lands after run_date, so it's "in the future".
+    for t in pick(counts["future_date"], completed):
+        problems.append({"trip_id": t["trip_id"], "problem": "future_date",
+                         "original_value": t["trip_date"].isoformat()})
+        t["trip_date"] = t["trip_date"] + timedelta(days=365)
+
+    # Vendor sent the same ride twice. The copy gets its own trip_id; the original is clean.
+    next_id = len(trips) + 1
+    for t in pick(counts["duplicate"], completed):
+        copy = {**t, "trip_id": f"T{next_id:08d}"}
+        next_id += 1
+        trips.append(copy)
+        problems.append({"trip_id": copy["trip_id"], "problem": "duplicate",
+                         "original_value": t["trip_id"]})
+
+    # Dropped a digit from the pickup ZIP.
+    for t in pick(counts["bad_zip"], completed):
+        problems.append({"trip_id": t["trip_id"], "problem": "bad_zip",
+                         "original_value": t["pickup_zip"]})
+        t["pickup_zip"] = t["pickup_zip"][:4]
+
+    return problems
+
+
 def load(con: duckdb.DuckDBPyConnection, table: str, rows: list[dict]) -> None:
     """Replace a table's contents, so re-running generate is idempotent."""
     con.execute(f"DELETE FROM {table}")
@@ -207,6 +308,11 @@ def run(config: Config, con: duckdb.DuckDBPyConnection) -> None:
     load(con, "plans", PLANS)
     members = make_members(config, rng, fake)
     vendors = make_vendors(config, rng, fake)
+    trips = make_trips(config, rng, fake, members, vendors)
+    vendors += make_problem_vendors(rng, fake)
+    problems = inject_problems(config, rng, members, trips)
+
     load(con, "members", members)
     load(con, "vendors", vendors)
-    load(con, "trips", make_trips(config, rng, fake, members, vendors))
+    load(con, "trips", trips)
+    load(con, "injected_problems", problems)

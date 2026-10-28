@@ -63,3 +63,12 @@ CREATE TABLE IF NOT EXISTS trips (
     loaded_miles DECIMAL(6, 1) NOT NULL,
     status VARCHAR NOT NULL             -- completed, cancelled, no_show
 );
+
+-- Answer key for the problems `generate` broke on purpose. The pipeline never reads
+-- this; tests use it to check the payer caught the right things, and resubmit uses
+-- original_value to simulate an ops fix.
+CREATE TABLE IF NOT EXISTS injected_problems (
+    trip_id VARCHAR PRIMARY KEY,
+    problem VARCHAR NOT NULL,
+    original_value VARCHAR             -- what the field was before we broke it
+);
