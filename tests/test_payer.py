@@ -1,7 +1,9 @@
 from encounter_pipeline import build, generate, payer
 from encounter_pipeline.config import Config
 from encounter_pipeline.db import connect
-from encounter_pipeline.x12.parser import parse
+from encounter_pipeline.x12.read_277ca import read_277ca
+from encounter_pipeline.x12.read_837 import read_837
+from encounter_pipeline.x12.read_999 import read_999
 
 EXPECTED_STATUS = {
     "future_date": "187",
@@ -13,26 +15,21 @@ EXPECTED_STATUS = {
 
 
 def responses(config):
-    """trip_id -> STC01 from every 277CA, and the 837 claim IDs in files a 999 rejected."""
-    statuses, rejected_by_999 = {}, set()
-    rejected_groups = set()
+    """trip_id -> status codes from every 277CA, and the claim IDs in files a 999 rejected."""
+    rejected = set()
     for path in config.inbound_dir.glob("999_*"):
-        segs = parse(path.read_text())
-        ak1 = next(s for s in segs if s.id == "AK1")
-        if any(s.id == "AK9" and s[1] == "R" for s in segs):
-            rejected_groups.add(ak1[2])
+        for ack in read_999(path.read_text()).transactions:
+            if not ack.accepted:
+                rejected.add((ack.gs06, ack.st02))
+    rejected_by_999 = set()
     for path in config.outbound_dir.glob("*.x12"):
-        segs = parse(path.read_text())
-        if segs[1][6] in rejected_groups:
-            rejected_by_999 |= {s[1] for s in segs if s.id == "CLM"}
+        f = read_837(path.read_text())
+        if (f.gs06, f.st02) in rejected:
+            rejected_by_999 |= {c.trip_id for c in f.claims}
+    statuses = {}
     for path in config.inbound_dir.glob("277CA_*"):
-        trip_id = None
-        for s in parse(path.read_text()):
-            if s.id == "TRN" and s[1] == "2" and s[2].startswith("T"):
-                trip_id = s[2]
-            elif s.id == "STC" and trip_id:
-                statuses[trip_id] = s.composite(1)
-                trip_id = None
+        for claim in read_277ca(path.read_text()).claims:
+            statuses[claim.trip_id] = claim.status_codes[0].split(":")
     return statuses, rejected_by_999
 
 
