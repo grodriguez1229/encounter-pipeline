@@ -73,3 +73,27 @@ CREATE TABLE IF NOT EXISTS injected_problems (
     problem VARCHAR NOT NULL,
     original_value VARCHAR             -- what the field was before we broke it
 );
+
+-- One row per outbound 837 file. Each file has one ISA, one GS and one ST, so the
+-- three control numbers identify it; responses come back pointing at them.
+CREATE TABLE IF NOT EXISTS submissions (
+    submission_id BIGINT PRIMARY KEY,   -- same as isa13, which is unique per file
+    file_name VARCHAR NOT NULL,
+    plan_id VARCHAR NOT NULL,
+    isa13 BIGINT NOT NULL,
+    gs06 BIGINT NOT NULL,
+    st02 VARCHAR NOT NULL,
+    claim_count INTEGER NOT NULL,
+    created_at TIMESTAMP NOT NULL
+);
+
+-- Which trips went out in which file. A trip shows up again when it's resubmitted.
+CREATE TABLE IF NOT EXISTS submission_claims (
+    submission_id BIGINT NOT NULL,
+    trip_id VARCHAR NOT NULL,
+    frequency_code VARCHAR NOT NULL,    -- CLM05-3: 1 original, 7 replacement
+    payer_claim_number VARCHAR,         -- REF*F8 on replacements
+    line_count INTEGER NOT NULL,
+    charge DECIMAL(10, 2) NOT NULL,
+    PRIMARY KEY (submission_id, trip_id)
+);

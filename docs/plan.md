@@ -58,7 +58,7 @@ tests/
 ### 3. 837P
 - 3a. Header + 1000A submitter / 1000B receiver, 2000A billing provider (the vendor), 2000B subscriber (the member) with 2010BA/2010BB. I'll explain the HL hierarchy (HL01 id, HL02 parent, HL03 level code) here since it's the part of the 837 that trips people up.
 - 3b. 2300 claim (CLM, CLM05-3 frequency code, HI diagnosis, pickup/dropoff in 2310E/2310F) and 2400 lines: base HCPCS by level of service + S0215 mileage, origin/destination modifiers, DTP*472.
-- 3c. `build` step: batch by plan and trip date, cap at `max_claims_per_file`, write to `data/outbound/`, record `submissions` and `submission_claims`.
+- 3c. `build` step: acts like a nightly job. Each trip goes out the night after its `reported_date` (when the vendor confirmed it), batched by plan and night, capped at `max_claims_per_file`. Writes to `data/outbound/`, records `submissions` and `submission_claims`.
 
 ### 4. X12 parser
 - 4a. Tokenizer: read delimiters from ISA positions (element sep at char 3, repetition at ISA11, sub-element at ISA16, segment terminator after ISA16). Tests with non-default delimiters.
