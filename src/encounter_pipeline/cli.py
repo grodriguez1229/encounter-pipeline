@@ -3,7 +3,7 @@
 import argparse
 import shutil
 
-from encounter_pipeline import build, generate
+from encounter_pipeline import build, generate, payer
 from encounter_pipeline.config import Config
 from encounter_pipeline.db import connect
 
@@ -13,6 +13,7 @@ STEPS = ["generate", "build", "simulate", "ingest", "resubmit", "report"]
 STEP_FUNCTIONS = {
     "generate": generate.run,
     "build": build.run,
+    "simulate": payer.run,
 }
 
 

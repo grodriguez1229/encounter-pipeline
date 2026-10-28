@@ -27,7 +27,10 @@ class Claim837:
     charge: Decimal
     frequency_code: str
     billing_npi: str | None
+    billing_name: str
     member_id: str
+    member_last_name: str
+    member_first_name: str
     payer_id: str
     payer_claim_number: str | None = None
     diagnosis: str | None = None
@@ -41,6 +44,9 @@ class File837:
     isa13: int
     gs06: int
     st02: str
+    created: datetime        # ISA09/ISA10
+    batch_id: str            # BHT03, echoed back in the 277CA
+    payer_name: str          # 1000B receiver
     claims: list[Claim837]
 
 
@@ -54,9 +60,11 @@ def read_837(text: str) -> File837:
 
 def claims_from_segments(segments: list[Segment]) -> File837:
     isa13 = gs06 = 0
-    st02 = ""
+    st02 = batch_id = payer_name = ""
+    created = datetime.min
     claims: list[Claim837] = []
-    billing_npi = member_id = payer_id = None
+    billing_npi = billing_name = member_id = payer_id = None
+    member_name = ("", "")
     entity = None             # entity code of the last NM1: 85, IL, PR, PW, 45...
     claim: Claim837 | None = None
 
@@ -64,18 +72,23 @@ def claims_from_segments(segments: list[Segment]) -> File837:
         match seg.id:
             case "ISA":
                 isa13 = int(seg[13])
+                created = datetime.strptime(seg[9] + seg[10], "%y%m%d%H%M")
             case "GS":
                 gs06 = int(seg[6])
             case "ST":
                 st02 = seg[2]
+            case "BHT":
+                batch_id = seg[3]
             case "HL":
                 claim = None  # a new HL closes any open claim
             case "NM1":
                 entity = seg[1]
-                if entity == "85":
-                    billing_npi = seg[9] or None
+                if entity == "40":
+                    payer_name = seg[3]
+                elif entity == "85":
+                    billing_npi, billing_name = seg[9] or None, seg[3]
                 elif entity == "IL":
-                    member_id = seg[9]
+                    member_id, member_name = seg[9], (seg[3], seg[4])
                 elif entity == "PR":
                     payer_id = seg[9]
             case "CLM":
@@ -84,7 +97,10 @@ def claims_from_segments(segments: list[Segment]) -> File837:
                     charge=Decimal(seg[2]),
                     frequency_code=seg.composite(5)[2],
                     billing_npi=billing_npi,
+                    billing_name=billing_name,
                     member_id=member_id,
+                    member_last_name=member_name[0],
+                    member_first_name=member_name[1],
                     payer_id=payer_id,
                 )
                 claims.append(claim)
@@ -107,4 +123,4 @@ def claims_from_segments(segments: list[Segment]) -> File837:
                 ))
             case "DTP" if claim and claim.lines and seg[1] == "472":
                 claim.lines[-1].service_date = parse_date(seg[3])
-    return File837(isa13, gs06, st02, claims)
+    return File837(isa13, gs06, st02, created, batch_id, payer_name, claims)
