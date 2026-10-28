@@ -97,3 +97,43 @@ CREATE TABLE IF NOT EXISTS submission_claims (
     charge DECIMAL(10, 2) NOT NULL,
     PRIMARY KEY (submission_id, trip_id)
 );
+
+-- Every response file we've loaded, raw text included, so a load can be re-checked later.
+CREATE TABLE IF NOT EXISTS response_files (
+    file_name VARCHAR PRIMARY KEY,
+    file_type VARCHAR NOT NULL,         -- 999 or 277CA
+    isa13 BIGINT NOT NULL,              -- the payer's interchange number
+    received_at TIMESTAMP NOT NULL,     -- ISA09/ISA10, standing in for when it landed
+    raw_text VARCHAR NOT NULL
+);
+
+-- 999 verdicts, one per outbound transaction set (here, one per file).
+CREATE TABLE IF NOT EXISTS submission_acks (
+    submission_id BIGINT NOT NULL,
+    response_file VARCHAR NOT NULL,
+    accepted BOOLEAN NOT NULL,
+    codes VARCHAR,                      -- IK502+ reasons, comma separated
+    errors VARCHAR,                     -- IK3/IK4 details, semicolon separated
+    received_at TIMESTAMP NOT NULL
+);
+
+-- Every status event for every claim, never updated. A 999 rejection writes a row for
+-- each claim in the rejected file; a 277CA writes one row per claim it mentions.
+CREATE TABLE IF NOT EXISTS claim_status_history (
+    trip_id VARCHAR NOT NULL,
+    submission_id BIGINT NOT NULL,
+    source VARCHAR NOT NULL,            -- 999 or 277CA
+    status VARCHAR NOT NULL,            -- accepted, rejected or pending
+    status_codes VARCHAR,               -- STC composites, comma separated, e.g. A7:562:85
+    payer_claim_number VARCHAR,
+    response_file VARCHAR NOT NULL,
+    received_at TIMESTAMP NOT NULL
+);
+
+-- Responses we couldn't tie back to anything we sent. Kept instead of failing the load.
+CREATE TABLE IF NOT EXISTS quarantine (
+    response_file VARCHAR NOT NULL,
+    reason VARCHAR NOT NULL,
+    detail VARCHAR,
+    received_at TIMESTAMP NOT NULL
+);

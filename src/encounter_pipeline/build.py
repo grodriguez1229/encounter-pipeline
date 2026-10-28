@@ -47,11 +47,13 @@ def write_submission(
 ) -> str:
     """Write one 837 file and record it. Returns the file name."""
     con.begin()
-    batch_id = f"{plan['plan_id']}{created:%Y%m%d}"
-    body = writer_837.transaction_body(claims, plan, batch_id, created)
     isa13 = next_control_number(con, "ISA")
     gs06 = next_control_number(con, "GS")
     st02 = f"{next_control_number(con, 'ST'):04d}"  # ST02 is 4-9 characters; 4 is typical
+    # BHT03 comes back in the 277CA (TRN02 at the receiver level), so it has to identify
+    # this one file. The ISA13 does.
+    batch_id = f"{isa13:09d}"
+    body = writer_837.transaction_body(claims, plan, batch_id, created)
     text = build_interchange(
         isa13=isa13,
         gs06=gs06,
