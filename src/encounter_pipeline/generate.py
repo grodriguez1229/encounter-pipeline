@@ -275,7 +275,10 @@ def inject_problems(
             first, last = m["eligibility_end"] + timedelta(days=1), last_trip_day
         else:
             first, last = config.trips_start_date, m["eligibility_start"] - timedelta(days=1)
-        t["trip_date"] = first + timedelta(days=rng.randint(0, (last - first).days))
+        new_date = first + timedelta(days=rng.randint(0, (last - first).days))
+        # The ride really happened on the new date, so it gets reported that much later too.
+        t["reported_date"] += new_date - t["trip_date"]
+        t["trip_date"] = new_date
 
     for problem, vendor_id in [("missing_npi", MISSING_NPI_VENDOR),
                                ("invalid_npi", INVALID_NPI_VENDOR)]:
