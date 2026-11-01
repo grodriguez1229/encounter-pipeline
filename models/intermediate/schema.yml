@@ -1,0 +1,18 @@
+version: 2
+
+models:
+  - name: int_trip_submissions
+    columns:
+      - name: trip_id
+        data_tests: [unique, not_null]
+
+  - name: int_trip_status
+    columns:
+      - name: trip_id
+        data_tests: [unique, not_null]
+      - name: current_status
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [accepted, rejected_final, rejected_open, awaiting_response]

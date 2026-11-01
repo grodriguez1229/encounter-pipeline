@@ -1,0 +1,21 @@
+# The same models/ folder the Python runner (src/encounter_pipeline/models.py) builds,
+# as a real dbt project. Run the pipeline first so the raw tables exist, then:
+#   uv sync --group dbt
+#   uv run --group dbt dbt build
+name: encounter_pipeline
+version: "1.0.0"
+profile: encounter_pipeline
+
+model-paths: ["models"]
+
+# Keep these in step with Config (tests/test_dbt_project.py checks).
+vars:
+  run_date: "2026-06-30"
+  submission_deadline_days: 30
+
+models:
+  encounter_pipeline:
+    +materialized: view
+
+flags:
+  send_anonymous_usage_stats: false

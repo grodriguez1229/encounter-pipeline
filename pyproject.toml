@@ -17,6 +17,9 @@ requires = ["uv_build>=0.12.21,<0.13.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
+dbt = [
+    "dbt-duckdb>=1.11.1",
+]
 dev = [
     "pytest>=9.2.0",
     "ruff>=0.17.3",

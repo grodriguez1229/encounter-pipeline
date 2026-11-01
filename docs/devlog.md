@@ -37,3 +37,9 @@ How this got built, in order. I used Claude Code as the main coder and reviewed 
 **run-all (step 10).** Wipes `data/`, runs generate, build, simulate and ingest, then loops resubmit, simulate, ingest until a round sends nothing (two rounds with the default seed), then the report. About 40 seconds. Tests check that two runs with the same seed produce byte-identical X12 files and report, and that a different seed doesn't.
 
 **README (step 11).** Short version of all of the above, how to run it, and trimmed samples of each file type from a real run with notes on what the important elements mean.
+
+## 2026-10-31
+
+**Local dbt project (step 12).** `dbt_project.yml` and `profiles.yml` at the repo root point dbt-duckdb at the same `models/` folder and the same DuckDB file, plus `sources.yml` for the raw tables and `schema.yml` per layer with 45 tests: keys unique and not null, status columns limited to the values the models can produce, and dims tied to facts with `relationships`. dbt is an optional dependency group (`uv sync --group dbt`), so the main install stays small. A test runs the pipeline, runs `dbt build` on the result, and checks every model has the same rows as the Python runner's. Another checks the dbt vars match the Python config.
+
+- My runner quoted string vars and dbt doesn't, so `DATE {{ var('run_date') }}` worked in one and broke in the other. The runner now leaves vars as they are, the way dbt does, and the SQL quotes them itself.

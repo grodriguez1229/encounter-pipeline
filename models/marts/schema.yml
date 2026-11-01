@@ -1,0 +1,65 @@
+version: 2
+
+models:
+  - name: dim_plan
+    columns:
+      - name: plan_id
+        data_tests: [unique, not_null]
+
+  - name: dim_member
+    columns:
+      - name: member_id
+        data_tests: [unique, not_null]
+      - name: plan_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_plan')
+                field: plan_id
+
+  - name: dim_vendor
+    columns:
+      - name: vendor_id
+        data_tests: [unique, not_null]
+
+  - name: dim_date
+    columns:
+      - name: date_day
+        data_tests: [unique, not_null]
+
+  - name: fct_encounter
+    description: One row per completed trip, with where its encounter stands now.
+    columns:
+      - name: trip_id
+        data_tests: [unique, not_null]
+      - name: member_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_member')
+                field: member_id
+      - name: vendor_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_vendor')
+                field: vendor_id
+      - name: current_status
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [accepted, rejected_final, rejected_open, awaiting_response, not_submitted]
+
+  - name: fct_claim_status
+    description: One row per status event (999 or 277CA) per claim.
+    columns:
+      - name: trip_id
+        data_tests: [not_null]
+      - name: submission_id
+        data_tests: [not_null]
+      - name: status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [accepted, rejected]

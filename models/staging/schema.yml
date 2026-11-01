@@ -1,0 +1,72 @@
+version: 2
+
+models:
+  - name: stg_plans
+    columns:
+      - name: plan_id
+        data_tests: [unique, not_null]
+
+  - name: stg_members
+    columns:
+      - name: member_id
+        data_tests: [unique, not_null]
+
+  - name: stg_vendors
+    columns:
+      - name: vendor_id
+        data_tests: [unique, not_null]
+
+  - name: stg_trips
+    columns:
+      - name: trip_id
+        data_tests: [unique, not_null]
+      - name: trip_status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [completed, cancelled, no_show]
+
+  - name: stg_submissions
+    columns:
+      - name: submission_id
+        data_tests: [unique, not_null]
+      - name: isa13
+        data_tests: [unique]
+
+  - name: stg_submission_claims
+    columns:
+      - name: submission_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_submissions')
+                field: submission_id
+      - name: trip_id
+        data_tests: [not_null]
+      - name: submission_type
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [original, replacement]
+
+  - name: stg_claim_status_history
+    columns:
+      - name: trip_id
+        data_tests: [not_null]
+      - name: response_type
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["999", "277CA"]
+      - name: status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [accepted, rejected]
+
+  - name: stg_status_codes
+    description: Would be a seed in a bigger project; a VALUES list keeps the Python runner simple.
+    columns:
+      - name: status_code
+        data_tests: [unique, not_null]

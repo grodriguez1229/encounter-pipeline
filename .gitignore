@@ -5,3 +5,6 @@ __pycache__/
 .ruff_cache/
 data/
 HANDOFF.md
+target/
+logs/
+dbt_packages/

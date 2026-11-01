@@ -8,6 +8,6 @@ SELECT
     isodow(d) IN (6, 7) AS is_weekend
 FROM range(
     (SELECT min(trip_date) FROM {{ ref('stg_trips') }}),
-    DATE {{ var('run_date') }} + INTERVAL 1 DAY,
+    DATE '{{ var('run_date') }}' + INTERVAL 1 DAY,
     INTERVAL 1 DAY
 ) AS t(d)

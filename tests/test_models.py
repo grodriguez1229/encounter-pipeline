@@ -24,8 +24,9 @@ def test_builds_in_dependency_order_with_refs_sources_and_vars(tmp_path):
     assert con.execute("select n from a_mart order by n").fetchall() == [(20,), (30,)]
 
 
-def test_string_vars_are_quoted():
-    assert compile_sql("select {{ var('d') }}", {"d": "2026-06-30"}) == "select '2026-06-30'"
+def test_vars_render_unquoted_like_dbt():
+    sql = "select DATE '{{ var('d') }}' + {{ var('n') }}"
+    assert compile_sql(sql, {"d": "2026-06-30", "n": 3}) == "select DATE '2026-06-30' + 3"
 
 
 def test_unknown_ref_and_cycles_fail():

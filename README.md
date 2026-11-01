@@ -22,6 +22,13 @@ That wipes `data/`, then:
 
 Each step also runs on its own (`uv run encounters build`, etc.). Same seed, same output, byte for byte.
 
+The models also run as a real dbt project (dbt-duckdb), with tests on keys, statuses and relationships:
+
+```
+uv sync --group dbt
+uv run --group dbt dbt build
+```
+
 ```
 - Completeness: 95.1% of completed trips have an accepted encounter
 - First-pass acceptance: 86.6%, resubmission success: 98.6%
@@ -84,7 +91,8 @@ src/encounter_pipeline/
   generate.py  build.py  payer.py  ingest.py  resubmit.py  report.py
   models.py            tiny stand-in for `dbt run` (ref, source, var)
   x12/                 segment writer, envelopes, 837P/999/277CA writers and readers
-models/                staging, intermediate, marts, metrics (dbt-style SQL)
+models/                staging, intermediate, marts, metrics (dbt SQL + schema tests)
+dbt_project.yml        same models as a dbt-duckdb project
 tests/                 including hand-written golden 999 and 277CA files
 docs/                  spec, plan, dev log
 ```

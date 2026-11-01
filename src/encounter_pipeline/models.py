@@ -37,13 +37,10 @@ def build_order(models: dict[str, str]) -> list[str]:
 
 
 def compile_sql(sql: str, variables: dict) -> str:
-    def var(match: re.Match) -> str:
-        value = variables[match.group(1)]
-        return str(value) if isinstance(value, int | float) else f"'{value}'"
-
+    # Vars go in as-is, unquoted, like dbt: the SQL adds quotes where it needs them.
     sql = REF.sub(lambda m: m.group(1), sql)
     sql = SOURCE.sub(lambda m: m.group(1), sql)
-    return VAR.sub(var, sql)
+    return VAR.sub(lambda m: str(variables[m.group(1)]), sql)
 
 
 def build_models(con: duckdb.DuckDBPyConnection, variables: dict,

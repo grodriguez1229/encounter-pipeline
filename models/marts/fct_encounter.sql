@@ -21,7 +21,7 @@ SELECT
     date_diff('day', t.trip_date, ts.first_submitted_at::DATE) AS days_to_submit,
     date_diff('day', t.trip_date, s.accepted_at::DATE) AS days_to_accept,
     -- Late = first submitted after the deadline, or not submitted and already past it.
-    coalesce(ts.first_submitted_at::DATE, DATE {{ var('run_date') }})
+    coalesce(ts.first_submitted_at::DATE, DATE '{{ var('run_date') }}')
         > t.trip_date + {{ var('submission_deadline_days') }} AS past_deadline
 FROM {{ ref('stg_trips') }} t
 JOIN {{ ref('stg_members') }} m USING (member_id)

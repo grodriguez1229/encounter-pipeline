@@ -1,0 +1,9 @@
+# dbt reads profiles.yml from the current folder before ~/.dbt, so this one is used
+# when you run dbt from the repo root. ENCOUNTERS_DB lets the tests point it elsewhere.
+encounter_pipeline:
+  target: local
+  outputs:
+    local:
+      type: duckdb
+      path: "{{ env_var('ENCOUNTERS_DB', 'data/warehouse.duckdb') }}"
+      threads: 4

@@ -1,0 +1,18 @@
+version: 2
+
+sources:
+  - name: raw
+    description: Operational tables the pipeline steps write (src/encounter_pipeline/sql/schema.sql).
+    schema: main
+    tables:
+      - name: plans
+      - name: members
+      - name: vendors
+      - name: trips
+      - name: submissions
+        description: One row per 837P file sent.
+      - name: submission_claims
+        description: One row per claim (trip) in each file.
+      - name: claim_status_history
+        description: Append-only claim statuses from 999s and 277CAs.
+      - name: final_rejections

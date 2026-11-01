@@ -95,7 +95,7 @@ tests/
 ### 11. README
 - A few short paragraphs, how to run it, a trimmed sample of an 837P, 999 and 277CA.
 
-### 12. Stretch: local dbt project
+### 12. Stretch: local dbt project (done)
 - `dbt_project.yml` + `profiles.yml` for dbt-duckdb pointing `model-paths` at `models/`, a `sources.yml` for the raw tables, and `schema.yml` tests (`unique`, `not_null`, `accepted_values` on status). `dbt build` should give the same tables as the Python runner. dbt-duckdb goes in an optional dependency group so the main install stays small.
 
 ### 13. Stretch: Airflow DAG
