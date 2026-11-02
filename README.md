@@ -29,6 +29,8 @@ uv sync --group dbt
 uv run --group dbt dbt build
 ```
 
+And there's an Airflow DAG in `dags/`, one task per step. Airflow isn't a dependency; `uv run --with apache-airflow airflow dags test encounters` runs it if you point `AIRFLOW__CORE__DAGS_FOLDER` at `dags/`.
+
 ```
 - Completeness: 95.1% of completed trips have an accepted encounter
 - First-pass acceptance: 86.6%, resubmission success: 98.6%
@@ -93,6 +95,7 @@ src/encounter_pipeline/
   x12/                 segment writer, envelopes, 837P/999/277CA writers and readers
 models/                staging, intermediate, marts, metrics (dbt SQL + schema tests)
 dbt_project.yml        same models as a dbt-duckdb project
+dags/                  Airflow DAG
 tests/                 including hand-written golden 999 and 277CA files
 docs/                  spec, plan, dev log
 ```

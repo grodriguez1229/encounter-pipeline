@@ -98,7 +98,7 @@ tests/
 ### 12. Stretch: local dbt project (done)
 - `dbt_project.yml` + `profiles.yml` for dbt-duckdb pointing `model-paths` at `models/`, a `sources.yml` for the raw tables, and `schema.yml` tests (`unique`, `not_null`, `accepted_values` on status). `dbt build` should give the same tables as the Python runner. dbt-duckdb goes in an optional dependency group so the main install stays small.
 
-### 13. Stretch: Airflow DAG
+### 13. Stretch: Airflow DAG (done)
 - `dags/encounters_dag.py` with one task per step calling the same functions. Not run in CI, just importable if Airflow is installed.
 
 ## Decisions (agreed 2026-10-27)
