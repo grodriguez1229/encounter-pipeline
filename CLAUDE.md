@@ -4,7 +4,7 @@ Synthetic NEMT encounter pipeline: 837P out, 999/277CA back, reconcile, resubmit
 
 ## Working style
 
-- The agent writes the code; Gus reviews it. Gus has to be able to explain every line in an interview, so work in small, reviewable commits (one step or concept at a time) and say briefly why a choice was made, especially anything X12-specific (loops, segments, control numbers, STC codes).
+- The agent writes the code; Gus reviews it. Every change should be small enough to review and explain, so work in small, reviewable commits (one step or concept at a time) and say briefly why a choice was made, especially anything X12-specific (loops, segments, control numbers, STC codes).
 - Gus is a healthcare data engineer: fluent in claims, eligibility, HL7, FHIR, dbt, SQL, AWS. New to raw X12. Don't explain general healthcare terms; do explain X12 details the first time they come up.
 - Keep it simple. Plain Python and SQL over frameworks. No X12 libraries: the hand-written writer and parser are the point.
 - This repo will be public. All data is synthetic. Never add real names, NPIs, member IDs, employer code, or secrets.
