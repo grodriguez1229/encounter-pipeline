@@ -14,7 +14,5 @@ def test_dag_imports_with_tasks_in_order():
 
     dag = module.encounters()
     order = [t.task_id for t in dag.topological_sort()]
-    assert order == ["generate", "build", "simulate", "ingest",
-                     "resubmit_1", "simulate_1", "ingest_1",
-                     "resubmit_2", "simulate_2", "ingest_2",
-                     "resubmit_3", "simulate_3", "ingest_3", "report"]
+    assert order == ["simulate", "ingest", "resubmit", "build", "report"]
+    assert dag.max_active_runs == 1 and dag.catchup

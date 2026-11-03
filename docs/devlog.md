@@ -56,6 +56,6 @@ How this got built, in order. I used Claude Code as the main coder and reviewed 
 
 Now `run-all` steps through every night from January 2 to June 30: deliver the responses that have arrived, ingest them, apply the fixes ops has finished, then send yesterday's trips. Fixes go before new trips so tonight's files have them. Each step takes the time of the nightly run, and the fake payer keeps its memory across nights so it reads each file once. First-pass acceptance is 96.6% now. A new test checks that no claim sent after its vendor's fix gets rejected for that NPI; I broke the fix on purpose to make sure it fails (66 rejections).
 
-The Airflow DAG changed to match: one DAG run per night with catchup, instead of one run with three fixed resubmit rounds. That's also a better fit for Airflow.
+The Airflow DAG changed to match: one DAG run per night with catchup, instead of one run with three fixed resubmit rounds. That's also a better fit for Airflow. I replayed all 180 nights through `airflow dags test`: the 641 837P files came out byte for byte the same as `run-all`, and so did every response, except the 10 that land on June 30 after the last nightly run, which run-all picks up at the end and the DAG would get the next night.
 
 - Two tests leaned on the old batching. The payer answer-key test assumed a duplicate's original always got through first; with different file grouping, an original can bounce at the 999 and then the copy is legitimately the first the payer sees. The test handles that case now.
