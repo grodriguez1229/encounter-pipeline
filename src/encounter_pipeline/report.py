@@ -89,11 +89,15 @@ def render(con: duckdb.DuckDBPyConnection, config: Config) -> str:
     return "\n".join(parts) + "\n"
 
 
-def run(config: Config, con: duckdb.DuckDBPyConnection) -> None:
+def build(config: Config, con: duckdb.DuckDBPyConnection) -> None:
     build_models(con, {
         "run_date": config.run_date.isoformat(),
         "submission_deadline_days": config.submission_deadline_days,
     })
+
+
+def run(config: Config, con: duckdb.DuckDBPyConnection) -> None:
+    build(config, con)
     path = config.data_dir / "report.md"
     path.write_text(render(con, config))
     print("\n".join(summary(con, config)))

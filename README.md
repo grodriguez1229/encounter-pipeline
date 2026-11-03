@@ -20,7 +20,7 @@ That wipes `data/`, then:
 5. **resubmit** works the rejections: fix what can be fixed and resend it, finalize what can't (not eligible, duplicates), and send late mileage corrections as replacements. Steps 3-5 repeat until nothing new goes out.
 6. **report** builds dbt-style SQL models in DuckDB and writes `data/report.md`.
 
-Each step also runs on its own (`uv run encounters build`, etc.). Same seed, same output, byte for byte.
+Each step also runs on its own (`uv run encounters build`, etc.). Same seed, same output, byte for byte. `uv run encounters trip T00001188` prints one trip's files, responses and fixes in order.
 
 The models also run as a real dbt project (dbt-duckdb), with tests on keys, statuses and relationships:
 

@@ -47,3 +47,7 @@ How this got built, in order. I used Claude Code as the main coder and reviewed 
 ## 2026-11-02
 
 **Airflow DAG (step 13).** `dags/encounters_dag.py` is one TaskFlow task per step, each calling the same `run_step` the CLI uses. Airflow wants a fixed graph, so the "loop until nothing goes out" becomes three fixed resubmit/simulate/ingest rounds; extra rounds do nothing because every step only picks up new work. It doesn't wipe `data/` like `run-all` does, since a scheduled run should carry on from the last one. Airflow isn't a project dependency. I ran it once with `airflow dags test` in a throwaway environment, and its report matched `run-all` exactly. The test only checks the DAG imports with the tasks in order, and skips when Airflow isn't installed.
+
+## 2026-11-03
+
+**`encounters trip <id>`.** Prints one trip's story in time order: each 837P it went out in, the 999 and 277CA answers with plain-English codes, any ops fixes, and final rejections. Made for demos, and it found a bug on its first run: a trip rejected in February for a bad NPI that had been fixed in January. More on that below once it's sorted.

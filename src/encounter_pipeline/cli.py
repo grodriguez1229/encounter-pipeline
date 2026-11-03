@@ -3,7 +3,7 @@
 import argparse
 import shutil
 
-from encounter_pipeline import build, generate, ingest, payer, report, resubmit
+from encounter_pipeline import build, generate, ingest, payer, report, resubmit, trip
 from encounter_pipeline.config import Config
 from encounter_pipeline.db import connect
 
@@ -48,10 +48,15 @@ def main(argv: list[str] | None = None) -> None:
     for step in STEP_FUNCTIONS:
         sub.add_parser(step)
     sub.add_parser("run-all", help="wipe data/ and run the whole pipeline")
+    sub.add_parser("trip", help="show one trip's files, responses and fixes").add_argument(
+        "trip_id")
     args = parser.parse_args(argv)
 
     config = Config(seed=args.seed)
     if args.command == "run-all":
         run_all(config)
+    elif args.command == "trip":
+        with connect(config) as con:
+            trip.run(config, con, args.trip_id)
     else:
         run_step(args.command, config)
