@@ -1,6 +1,7 @@
 import pytest
 
-from encounter_pipeline import build, generate, ingest, payer, report, resubmit
+from encounter_pipeline import generate, report
+from encounter_pipeline.cli import run_nights
 from encounter_pipeline.config import Config
 from encounter_pipeline.db import connect
 
@@ -11,11 +12,7 @@ def reported(tmp_path_factory):
     config = Config(data_dir=tmp / "data", n_members=200, n_trips=1200, error_rate=0.2)
     con = connect(config)
     generate.run(config, con)
-    build.run(config, con)
-    for _ in range(2):
-        payer.run(config, con)
-        ingest.run(config, con)
-        resubmit.run(config, con)
+    run_nights(config, con)
     report.run(config, con)
     return config, con
 

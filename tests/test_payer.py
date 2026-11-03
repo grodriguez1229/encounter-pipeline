@@ -34,12 +34,18 @@ def responses(config):
 
 
 def test_payer_rejects_exactly_the_injected_problems(tmp_path):
-    config = Config(data_dir=tmp_path / "data", n_members=150, n_trips=800, error_rate=0.2)
+    # One build with no fixes, so every injected problem is still there when it's sent.
+    # Small files so the missing-NPI vendor doesn't take down every one at the 999.
+    config = Config(data_dir=tmp_path / "data", n_members=150, n_trips=800, error_rate=0.2,
+                    max_claims_per_file=25)
     with connect(config) as con:
         generate.run(config, con)
         build.run(config, con)
         payer.run(config, con)
         key = dict(con.execute("SELECT trip_id, problem FROM injected_problems").fetchall())
+        originals = dict(con.execute(
+            "SELECT trip_id, original_value FROM injected_problems WHERE problem = 'duplicate'"
+        ).fetchall())
 
     statuses, rejected_by_999 = responses(config)
     assert statuses and rejected_by_999
@@ -53,6 +59,9 @@ def test_payer_rejects_exactly_the_injected_problems(tmp_path):
 
     for trip_id, (category, code, *_) in statuses.items():
         problem = key.get(trip_id)
+        if problem == "duplicate" and originals[trip_id] in rejected_by_999:
+            # The original bounced at the 999, so this copy is the first the payer saw.
+            problem = None
         if problem is None:
             assert (category, code) == ("A2", "20"), trip_id
         else:

@@ -13,7 +13,7 @@ Synthetic NEMT encounter pipeline: 837P out, 999/277CA back, reconcile, resubmit
 ## Commands
 
 - `uv sync` to install, `uv run pytest` to test, `uv run ruff check .` to lint.
-- `uv run encounters run-all` runs the whole pipeline: wipes `data/`, generates, submits, loops resubmissions until nothing new goes out, writes `data/report.md`.
+- `uv run encounters run-all` runs the whole pipeline: wipes `data/`, generates, runs every night through `run_date` (responses in, fixes and new trips out), writes `data/report.md`. `uv run encounters trip <id>` shows one trip's history.
 - `uv sync --group dbt` then `uv run --group dbt dbt build` builds and tests the same models with dbt (after a run).
 
 ## Git

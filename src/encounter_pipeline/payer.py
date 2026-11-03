@@ -4,16 +4,17 @@ This stands in for the clearinghouse and payer, so it only uses what they'd have
 the 837 files themselves and the plan's enrollment roster (our members table).
 It doesn't read the answer key; every rejection comes from a check on the data.
 
-It's stateless: every run replays all outbound files in the order they were sent,
-with a random generator seeded per file, so the same files always get the same
-responses. A response only gets written once its arrival time is on or before
-run_date; later ones haven't "arrived" yet.
+Each 837 is answered in the order it was sent, with a random generator seeded per
+file, so the same files always get the same responses. A response is only written
+once its arrival time has passed; later ones haven't "arrived" yet.
+
+run-all keeps one Payer for the whole run, so it only reads each 837 once. The `run`
+step starts fresh and replays every file sent so far, which gives the same answers.
 """
 
 import random
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
-from pathlib import Path
 
 import duckdb
 
@@ -160,24 +161,48 @@ def send_order(text: str) -> tuple[str, str, str]:
     return (isa[9], isa[10], isa[13])
 
 
-def outbound_in_send_order(outbound_dir: Path) -> list[str]:
-    return sorted((p.read_text() for p in outbound_dir.glob("*.x12")), key=send_order)
+class Payer:
+    """The payer over time: answers each 837 once, and holds the responses until they
+    arrive."""
 
+    def __init__(self, config: Config, con: duckdb.DuckDBPyConnection):
+        self.config = config
+        self.roster: Roster = {
+            member_id: (start, end)
+            for member_id, start, end in con.execute(
+                "SELECT member_id, eligibility_start, eligibility_end FROM members"
+            ).fetchall()
+        }
+        self.state = PayerState()
+        self.answered: set[str] = set()
+        self.in_flight: list[Response] = []
 
-def run(config: Config, con: duckdb.DuckDBPyConnection) -> None:
-    roster = {
-        member_id: (start, end)
-        for member_id, start, end in con.execute(
-            "SELECT member_id, eligibility_start, eligibility_end FROM members"
-        ).fetchall()
-    }
-    cutoff = datetime.combine(config.run_date + timedelta(days=1), time())
-    state = PayerState()
-    written = 0
-    for text in outbound_in_send_order(config.outbound_dir):
-        for r in respond(config, text, roster, state):
-            path = config.inbound_dir / r.file_name
-            if r.arrives < cutoff and not path.exists():
+    def answer_new_files(self) -> None:
+        new = {p.name: p.read_text() for p in self.config.outbound_dir.glob("*.x12")
+               if p.name not in self.answered}
+        for name, text in sorted(new.items(), key=lambda item: send_order(item[1])):
+            self.answered.add(name)
+            self.in_flight += respond(self.config, text, self.roster, self.state)
+
+    def deliver(self, now: datetime) -> int:
+        """Write every response that has arrived by now. Returns how many were new."""
+        self.answer_new_files()
+        arrived = [r for r in self.in_flight if r.arrives < now]
+        self.in_flight = [r for r in self.in_flight if r.arrives >= now]
+        written = 0
+        for r in arrived:
+            path = self.config.inbound_dir / r.file_name
+            if not path.exists():
                 path.write_text(r.text)
                 written += 1
-    print(f"simulate: wrote {written} response files")
+        return written
+
+
+def end_of(day: date) -> datetime:
+    return datetime.combine(day + timedelta(days=1), time())
+
+
+def run(config: Config, con: duckdb.DuckDBPyConnection, now: datetime | None = None) -> int:
+    """Responses that have arrived by now (default: the end of run_date). Returns how many
+    files were written."""
+    return Payer(config, con).deliver(now or end_of(config.run_date))

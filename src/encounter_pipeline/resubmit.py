@@ -18,8 +18,9 @@ Fixed claims go back as new originals (CLM05-3 = 1): a claim rejected on the 999
 Separately, a vendor's corrected mileage on an accepted encounter is sent as a
 replacement (CLM05-3 = 7) with the payer's claim number in REF*F8.
 
-Fixes happen 1-5 days after the rejection arrives and go out the next night. Anything
-that would happen after run_date is left for later.
+Ops fixes a rejection 1-5 days after it arrives, and the fix goes out the next night.
+Each call is one nightly run: it only applies the fixes that are done by tonight, so a
+vendor's corrected NPI is in place for every file built after the fix, and not before.
 """
 
 import random
@@ -28,7 +29,7 @@ from datetime import date, datetime, timedelta
 
 import duckdb
 
-from encounter_pipeline.build import NIGHTLY_RUN_TIME, rows_as_dicts, write_submission
+from encounter_pipeline.build import night_of, rows_as_dicts, write_batches
 from encounter_pipeline.config import Config
 from encounter_pipeline.generate import fake_npi
 from encounter_pipeline.x12.writer_837 import ClaimInput
@@ -63,10 +64,6 @@ LATEST_STATUS = """
         JOIN members m USING (member_id)
     )
 """
-
-
-def next_night(day: date) -> datetime:
-    return datetime.combine(day + timedelta(days=1), NIGHTLY_RUN_TIME)
 
 
 def log_adjustment(con, table: str, row_id: str, field: str, old, new, on: date,
@@ -107,8 +104,10 @@ class Fixer:
         log_adjustment(self.con, "trips", trip_id, field, old, new, on, reason)
 
 
-def work_rejections(config: Config, con: duckdb.DuckDBPyConnection, batches: dict) -> None:
-    """Fix or finalize each open rejection; fixed ones are added to batches."""
+def work_rejections(config: Config, con: duckdb.DuckDBPyConnection, now: datetime,
+                    batches: dict) -> None:
+    """Finalize open rejections, and fix the ones ops has finished by tonight; fixed ones
+    are added to batches."""
     fixer = Fixer(config, con)
     rejections = rows_as_dicts(con, LATEST_STATUS + """
         SELECT * FROM latest_status
@@ -131,7 +130,7 @@ def work_rejections(config: Config, con: duckdb.DuckDBPyConnection, batches: dic
         else:
             rng = random.Random(f"{config.seed}:fix:{r['submission_id']}:{trip_id}")
         fixed_on = r["received_at"].date() + timedelta(days=rng.randint(1, 5))
-        if fixed_on >= config.run_date:
+        if fixed_on >= now.date():
             continue  # ops hasn't gotten to it yet
 
         if r["source"] == "999":
@@ -147,10 +146,10 @@ def work_rejections(config: Config, con: duckdb.DuckDBPyConnection, batches: dic
                 fixer.vendor_npi(trip_id, fixed_on, f"277CA {codes}")
             else:
                 fixer.trip_field(trip_id, field, fixed_on, f"277CA {codes}")
-        batches[(next_night(fixed_on), r["plan_id"])].append((trip_id, "1", None))
+        batches[r["plan_id"]].append((trip_id, "1", None))
 
 
-def queue_replacements(config: Config, con: duckdb.DuckDBPyConnection, batches: dict) -> None:
+def queue_replacements(con: duckdb.DuckDBPyConnection, now: datetime, batches: dict) -> None:
     """Accepted encounters with a vendor mileage correction go out as replacements."""
     corrections = rows_as_dicts(con, LATEST_STATUS + """
         SELECT s.trip_id, s.plan_id, s.payer_claim_number, s.received_at,
@@ -164,40 +163,36 @@ def queue_replacements(config: Config, con: duckdb.DuckDBPyConnection, batches: 
     for r in corrections:
         # Can't replace before the payer accepted it and gave us a claim number.
         sent_on = max(r["reported_date"], r["received_at"].date())
-        if sent_on >= config.run_date:
+        if sent_on >= now.date():
             continue
         con.execute("UPDATE trips SET loaded_miles = ? WHERE trip_id = ?",
                     [r["corrected_miles"], r["trip_id"]])
         log_adjustment(con, "trips", r["trip_id"], "loaded_miles", r["loaded_miles"],
                        r["corrected_miles"], sent_on, "vendor sent corrected mileage")
-        batches[(next_night(sent_on), r["plan_id"])].append(
-            (r["trip_id"], "7", r["payer_claim_number"]))
+        batches[r["plan_id"]].append((r["trip_id"], "7", r["payer_claim_number"]))
 
 
-def run(config: Config, con: duckdb.DuckDBPyConnection) -> int:
-    """Returns how many files were written, so run-all knows when to stop."""
+def run(config: Config, con: duckdb.DuckDBPyConnection, now: datetime | None = None) -> int:
+    """Tonight's fixes and replacements. Defaults to the run on run_date. Returns files
+    written."""
+    now = now or night_of(config.run_date)
     con.begin()
-    batches: dict = defaultdict(list)   # (night, plan_id) -> [(trip_id, frequency, pcn)]
-    work_rejections(config, con, batches)
-    queue_replacements(config, con, batches)
+    batches: dict = defaultdict(list)   # plan_id -> [(trip_id, frequency, pcn)]
+    work_rejections(config, con, now, batches)
+    queue_replacements(con, now, batches)
     con.commit()
+    if not batches:
+        return 0
 
-    plans = {p["plan_id"]: p for p in rows_as_dicts(con, "SELECT * FROM plans")}
     members = {m["member_id"]: m for m in rows_as_dicts(con, "SELECT * FROM members")}
     vendors = {v["vendor_id"]: v for v in rows_as_dicts(con, "SELECT * FROM vendors")}
     trips = {t["trip_id"]: t for t in rows_as_dicts(con, "SELECT * FROM trips")}
-
-    files = 0
-    for (night, plan_id), items in sorted(batches.items()):
-        claims = [
+    claims_by_plan = {
+        plan_id: [
             ClaimInput(trips[trip_id], members[trips[trip_id]["member_id"]],
                        vendors[trips[trip_id]["vendor_id"]], freq, pcn)
             for trip_id, freq, pcn in items
         ]
-        for start in range(0, len(claims), config.max_claims_per_file):
-            write_submission(con, config, plans[plan_id],
-                             claims[start : start + config.max_claims_per_file], night)
-            files += 1
-    finals = con.execute("SELECT count(*) FROM final_rejections").fetchone()[0]
-    print(f"resubmit: wrote {files} files, {finals} final rejections so far")
-    return files
+        for plan_id, items in batches.items()
+    }
+    return write_batches(con, config, claims_by_plan, now)

@@ -2,7 +2,8 @@ from datetime import timedelta
 
 import pytest
 
-from encounter_pipeline import build, generate, ingest, payer, resubmit
+from encounter_pipeline import generate, resubmit
+from encounter_pipeline.cli import run_nights
 from encounter_pipeline.config import Config
 from encounter_pipeline.db import connect
 from encounter_pipeline.x12.read_837 import read_837
@@ -27,11 +28,7 @@ def cycled(tmp_path_factory):
     config = Config(data_dir=tmp / "data", n_members=200, n_trips=1200, error_rate=0.2)
     con = connect(config)
     generate.run(config, con)
-    build.run(config, con)
-    for _ in range(3):
-        payer.run(config, con)
-        ingest.run(config, con)
-        resubmit.run(config, con)
+    run_nights(config, con)
     return config, con
 
 
@@ -87,3 +84,19 @@ def test_rerun_without_new_responses_sends_nothing(cycled):
     before = con.execute("SELECT count(*) FROM submissions").fetchone()[0]
     resubmit.run(config, con)
     assert con.execute("SELECT count(*) FROM submissions").fetchone()[0] == before
+
+
+def test_vendor_fix_applies_to_every_file_built_after_it(cycled):
+    _, con = cycled
+    before, after = con.execute("""
+        SELECT
+            count(*) FILTER (WHERE s.created_at::DATE <= a.adjusted_on),
+            count(*) FILTER (WHERE s.created_at::DATE > a.adjusted_on)
+        FROM claim_status_history h
+        JOIN submissions s USING (submission_id)
+        JOIN trips t USING (trip_id)
+        JOIN source_adjustments a ON a.table_name = 'vendors' AND a.row_id = t.vendor_id
+        WHERE h.status = 'rejected' AND (h.source = '999' OR h.status_codes = 'A7:562:85')
+    """).fetchone()
+    assert before > 0
+    assert after == 0

@@ -51,3 +51,11 @@ How this got built, in order. I used Claude Code as the main coder and reviewed 
 ## 2026-11-03
 
 **`encounters trip <id>`.** Prints one trip's story in time order: each 837P it went out in, the 999 and 277CA answers with plain-English codes, any ops fixes, and final rejections. Made for demos, and it found a bug on its first run: a trip rejected in February for a bad NPI that had been fixed in January. More on that below once it's sorted.
+
+**Night by night.** The bug the trip command found: `build` wrote every night's 837Ps in one pass before any responses or fixes existed, then resubmit rounds cleaned up after. So once ops fixed a vendor's NPI in January, every trip from that vendor through June still went out with the bad one. 471 of the 479 claims rejected by 999s, and 38 of the 39 bad-NPI rejections, were sent after the fix. First-pass acceptance said 86.6%; it should have been about 96%.
+
+Now `run-all` steps through every night from January 2 to June 30: deliver the responses that have arrived, ingest them, apply the fixes ops has finished, then send yesterday's trips. Fixes go before new trips so tonight's files have them. Each step takes the time of the nightly run, and the fake payer keeps its memory across nights so it reads each file once. First-pass acceptance is 96.6% now. A new test checks that no claim sent after its vendor's fix gets rejected for that NPI; I broke the fix on purpose to make sure it fails (66 rejections).
+
+The Airflow DAG changed to match: one DAG run per night with catchup, instead of one run with three fixed resubmit rounds. That's also a better fit for Airflow.
+
+- Two tests leaned on the old batching. The payer answer-key test assumed a duplicate's original always got through first; with different file grouping, an original can bounce at the 999 and then the copy is legitimately the first the payer sees. The test handles that case now.

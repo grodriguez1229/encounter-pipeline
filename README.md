@@ -14,13 +14,14 @@ uv run encounters run-all
 That wipes `data/`, then:
 
 1. **generate** makes 1,000 members, 17 vendors and about 6,000 ride legs for Jan-Jun 2026, and breaks 5% of the completed ones on purpose (not eligible, missing NPI, bad NPI, future date, duplicate, bad ZIP).
-2. **build** acts like a nightly job: each ride goes out as an 837P the night after the vendor reports it, batched by plan.
-3. **simulate** is the fake payer. It runs syntax checks and sends a 999 per file, then business edits and a 277CA per claim. Some responses come back days late.
-4. **ingest** loads the responses and matches them by control numbers, never file names. Anything that doesn't match goes to a quarantine table.
-5. **resubmit** works the rejections: fix what can be fixed and resend it, finalize what can't (not eligible, duplicates), and send late mileage corrections as replacements. Steps 3-5 repeat until nothing new goes out.
-6. **report** builds dbt-style SQL models in DuckDB and writes `data/report.md`.
+2. Then it runs every night from January 2 through June 30, in order. Each night:
+   - **simulate**, the fake payer, delivers the responses that have come in: a 999 per file a few hours after it's sent (syntax checks), then a 277CA per file with a status per claim (business edits). Some 277CAs are days late.
+   - **ingest** loads them and matches them by control numbers, never file names. Anything that doesn't match goes to a quarantine table.
+   - **resubmit** works the rejections: fixes what can be fixed and resends it once ops is done (1-5 days later), finalizes what can't be (not eligible, duplicates), and sends late mileage corrections as replacements.
+   - **build** sends yesterday's reported rides as 837Ps, batched by plan. It runs after resubmit, so a vendor NPI fixed today is on tonight's files.
+3. **report** builds dbt-style SQL models in DuckDB and writes `data/report.md`.
 
-Each step also runs on its own (`uv run encounters build`, etc.). Same seed, same output, byte for byte. `uv run encounters trip T00001188` prints one trip's files, responses and fixes in order.
+Same seed, same output, byte for byte. Each step also runs on its own as a single night (`uv run encounters build`, etc.). `uv run encounters trip T00005352` prints one trip's files, responses and fixes in order.
 
 The models also run as a real dbt project (dbt-duckdb), with tests on keys, statuses and relationships:
 
@@ -29,23 +30,23 @@ uv sync --group dbt
 uv run --group dbt dbt build
 ```
 
-And there's an Airflow DAG in `dags/`, one task per step. Airflow isn't a dependency; `uv run --with apache-airflow airflow dags test encounters` runs it if you point `AIRFLOW__CORE__DAGS_FOLDER` at `dags/`.
+And there's an Airflow DAG in `dags/`: one DAG run per night, one task per step, with catchup to replay January through June. Airflow isn't a dependency; `uv run --with apache-airflow airflow dags test encounters 2026-01-02` runs one night if you point `AIRFLOW__CORE__DAGS_FOLDER` at `dags/`.
 
 ```
-- Completeness: 95.1% of completed trips have an accepted encounter
-- First-pass acceptance: 86.6%, resubmission success: 98.6%
+- Completeness: 95.8% of completed trips have an accepted encounter
+- First-pass acceptance: 96.6%, resubmission success: 100%
 - Median days from trip to submission: 4; 2.8% past the 30-day deadline
 ```
 
 ## What the files look like
 
-An 837P with one claim (one ride leg, dialysis clinic back home), trimmed:
+An 837P with one claim (one ride leg, dialysis clinic back home), trimmed. It's a resend: the first try had a 4-digit pickup ZIP and came back A7:500:PW.
 
 ```
-ISA*00*          *00*          *ZZ*SYNNEMT        *ZZ*SYNMA1         *260618*0200*^*00501*000000668*0*T*:~
-GS*HC*SYNNEMT*SYNMA1*20260618*0200*668*X*005010X222A1~
-ST*837*0668*005010X222A1~
-BHT*0019*00*000000668*20260618*0200*RP~           RP = reporting: an encounter, not a bill
+ISA*00*          *00*          *ZZ*SYNNEMT        *ZZ*SYNMA1         *260619*0200*^*00501*000000596*0*T*:~
+GS*HC*SYNNEMT*SYNMA1*20260619*0200*596*X*005010X222A1~
+ST*837*0596*005010X222A1~
+BHT*0019*00*000000596*20260619*0200*RP~           RP = reporting: an encounter, not a bill
 ...
 HL*1**20*1~                                       billing provider (the vendor)
 NM1*85*2*WALL TRANSPORT LLC*****XX*9708620957~
@@ -60,17 +61,17 @@ DTP*472*D8*20260610~
 LX*2~
 SV1*HC:S0215:JR*30.25*UN*12.1***1~                12.1 loaded miles
 DTP*472*D8*20260610~
-SE*32*0668~
-GE*1*668~
-IEA*1*000000668~
+SE*32*0596~
+GE*1*596~
+IEA*1*000000596~
 ```
 
 A 999 rejecting a whole file because one vendor had no NPI:
 
 ```
-AK1*HC*234*005010X222A1~       our GS06
-AK2*837*0234*005010X222A1~     our ST02
-IK3*NM1*263*2010AA*8~          segment 263, billing provider loop
+AK1*HC*31*005010X222A1~        our GS06
+AK2*837*0031*005010X222A1~     our ST02
+IK3*NM1*148*2010AA*8~          segment 148, billing provider loop
 IK4*9*67*2~                    NM109 (the NPI) missing
 IK5*R*5~                       transaction rejected
 AK9*R*1*1*0~                   group rejected
@@ -80,10 +81,10 @@ A 277CA rejecting one claim for a bad NPI check digit (the 999 can't catch that,
 
 ```
 NM1*85*2*WARE TRANSPORT LLC*****XX*9870894100~
-HL*32*31*PT~
-NM1*QC*1*SMITH*JOSHUA****MI*M00000369~
-TRN*2*T00001188~                    our CLM01
-STC*A7:562:85*20260207*U*43.75~     A7 invalid info, 562 NPI, 85 billing provider
+HL*18*17*PT~
+NM1*QC*1*FRANCIS*CHARLES****MI*M00000409~
+TRN*2*T00000094~                 our CLM01
+STC*A7:562:85*20260106*U*71~     A7 invalid info, 562 NPI, 85 billing provider
 ```
 
 ## Layout

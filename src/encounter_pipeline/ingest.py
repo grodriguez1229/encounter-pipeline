@@ -80,7 +80,8 @@ def received_order(path: Path) -> tuple:
     return (fields[9], fields[10], path.name)
 
 
-def run(config: Config, con: duckdb.DuckDBPyConnection) -> None:
+def run(config: Config, con: duckdb.DuckDBPyConnection) -> int:
+    """Load every response file not loaded yet. Returns how many."""
     loaded = {name for (name,) in con.execute("SELECT file_name FROM response_files").fetchall()}
     new_files = [p for p in config.inbound_dir.glob("*.x12") if p.name not in loaded]
     for path in sorted(new_files, key=received_order):
@@ -101,4 +102,4 @@ def run(config: Config, con: duckdb.DuckDBPyConnection) -> None:
         con.execute("INSERT INTO response_files VALUES (?, ?, ?, ?, ?)",
                     [path.name, file_type, f.isa13, f.created, text])
         con.commit()
-    print(f"ingest: loaded {len(new_files)} files")
+    return len(new_files)

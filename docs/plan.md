@@ -90,6 +90,7 @@ tests/
 - 9f. `report` prints a short summary and writes `data/report.md`.
 
 ### 10. run-all + end-to-end test
+- Changed after step 13: `run-all` now runs every step once per night instead of building every night's files up front (see the devlog, 2026-11-03).
 - `run-all` runs every step, including a second simulate/ingest pass after resubmit. Test: two seeded runs produce identical metrics.
 
 ### 11. README

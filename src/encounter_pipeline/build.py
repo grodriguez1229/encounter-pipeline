@@ -1,12 +1,12 @@
 """build: turn completed trips into outbound 837P files.
 
-Acts like a nightly job that has been running since the start of the data: each
-trip goes out the night after the vendor reported it, batched by plan, at most
-max_claims_per_file per file. Trips that were already submitted are skipped, so
-re-running only picks up new work.
+One call is one nightly run: every completed trip the vendor reported before tonight
+that hasn't gone out yet is sent, batched by plan, at most max_claims_per_file per
+file. run-all calls it once a night, so each trip goes out the night after it was
+reported, with whatever fixes ops made up to then.
 """
 
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time
 from itertools import groupby
 
 import duckdb
@@ -19,14 +19,19 @@ from encounter_pipeline.x12.writer_837 import ClaimInput
 NIGHTLY_RUN_TIME = time(2, 0)
 
 
+def night_of(day: date) -> datetime:
+    """When the nightly run on this day happens."""
+    return datetime.combine(day, NIGHTLY_RUN_TIME)
+
+
 def rows_as_dicts(con: duckdb.DuckDBPyConnection, sql: str, params=None) -> list[dict]:
     cursor = con.execute(sql, params or [])
     columns = [d[0] for d in cursor.description]
     return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
 
 
-def pending_trips(con: duckdb.DuckDBPyConnection, config: Config) -> list[dict]:
-    """Completed trips that were reported before the last nightly run and never submitted."""
+def pending_trips(con: duckdb.DuckDBPyConnection, now: datetime) -> list[dict]:
+    """Completed trips reported before tonight that were never submitted."""
     return rows_as_dicts(con, """
         SELECT t.*, m.plan_id
         FROM trips t
@@ -34,8 +39,8 @@ def pending_trips(con: duckdb.DuckDBPyConnection, config: Config) -> list[dict]:
         WHERE t.status = 'completed'
           AND t.reported_date < ?
           AND t.trip_id NOT IN (SELECT trip_id FROM submission_claims)
-        ORDER BY t.reported_date, m.plan_id, t.vendor_id, t.member_id, t.trip_id
-    """, [config.run_date])
+        ORDER BY m.plan_id, t.reported_date, t.vendor_id, t.member_id, t.trip_id
+    """, [now.date()])
 
 
 def write_submission(
@@ -85,17 +90,29 @@ def write_submission(
     return file_name
 
 
-def run(config: Config, con: duckdb.DuckDBPyConnection) -> None:
+def write_batches(con: duckdb.DuckDBPyConnection, config: Config,
+                  claims_by_plan: dict[str, list[ClaimInput]], now: datetime) -> int:
+    """Write each plan's claims as files of at most max_claims_per_file. Returns the count."""
     plans = {p["plan_id"]: p for p in rows_as_dicts(con, "SELECT * FROM plans")}
-    members = {m["member_id"]: m for m in rows_as_dicts(con, "SELECT * FROM members")}
-    vendors = {v["vendor_id"]: v for v in rows_as_dicts(con, "SELECT * FROM vendors")}
-
-    files = []
-    batches = groupby(pending_trips(con, config), key=lambda t: (t["reported_date"], t["plan_id"]))
-    for (reported_date, plan_id), trips in batches:
-        created = datetime.combine(reported_date + timedelta(days=1), NIGHTLY_RUN_TIME)
-        claims = [ClaimInput(t, members[t["member_id"]], vendors[t["vendor_id"]]) for t in trips]
+    files = 0
+    for plan_id, claims in sorted(claims_by_plan.items()):
         for start in range(0, len(claims), config.max_claims_per_file):
             chunk = claims[start : start + config.max_claims_per_file]
-            files.append(write_submission(con, config, plans[plan_id], chunk, created))
-    print(f"build: wrote {len(files)} files")
+            write_submission(con, config, plans[plan_id], chunk, now)
+            files += 1
+    return files
+
+
+def run(config: Config, con: duckdb.DuckDBPyConnection, now: datetime | None = None) -> int:
+    """Send tonight's new trips. Defaults to the run on run_date. Returns files written."""
+    now = now or night_of(config.run_date)
+    trips = pending_trips(con, now)
+    if not trips:
+        return 0
+    members = {m["member_id"]: m for m in rows_as_dicts(con, "SELECT * FROM members")}
+    vendors = {v["vendor_id"]: v for v in rows_as_dicts(con, "SELECT * FROM vendors")}
+    claims_by_plan = {
+        plan_id: [ClaimInput(t, members[t["member_id"]], vendors[t["vendor_id"]]) for t in group]
+        for plan_id, group in groupby(trips, key=lambda t: t["plan_id"])
+    }
+    return write_batches(con, config, claims_by_plan, now)

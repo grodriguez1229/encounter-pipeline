@@ -79,7 +79,7 @@ Star-ish, kept small:
 
 - Python 3.12, uv, DuckDB, Faker, pytest, ruff.
 - CLI with plain `argparse` or `typer`: `encounters generate | build | simulate | ingest | resubmit | report | run-all`.
-- Orchestration: `run-all` runs the steps in order. Stretch: a small Airflow DAG file that calls the same functions, to show the steps map onto Airflow tasks (no need to run a real Airflow cluster). Stretch: a local dbt-duckdb project over the same model files.
+- Orchestration: `run-all` runs the steps once per simulated night, in order, so fixes made on a given day are in every file built after it. Stretch: a small Airflow DAG file that calls the same functions, to show the steps map onto Airflow tasks (no need to run a real Airflow cluster). Stretch: a local dbt-duckdb project over the same model files.
 
 ## Tests
 
